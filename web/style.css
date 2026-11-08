@@ -61,3 +61,6 @@ body.viewer .recipient-welcome[hidden]{display:none}
 .viewer #cinema-controls[hidden]{visibility:hidden}
 .viewer #cinema-controls button{min-height:44px;padding:6px 9px;background:transparent;border-color:transparent;color:var(--muted)}
 .viewer #cinema-controls button:hover,.viewer #cinema-controls button:focus-visible{border-color:var(--gold)}
+#scene-cue{position:absolute;bottom:4%;left:50%;transform:translateX(-50%);pointer-events:none;
+  padding:5px 11px;border-radius:20px;white-space:nowrap;background:#190f27df;color:#ffe1ac;font-size:12px}
+.viewer canvas:focus:not(:focus-visible){outline:none}

@@ -1,3 +1,5 @@
+import {acts} from './journey.js';
+
 export const WIDTH = 720, HEIGHT = 1280, FPS = 30, DURATION = 47;
 export const SCENES = [
   ['The lantern-lit house', 'Move your pointer or trace the courtyard with a finger.', 'Enter the courtyard'],
@@ -262,11 +264,10 @@ export function cameraAt(scene,t,reduceMotion){
 
 // Recipient cues use one clock across the five acts and the ambient closing.
 export const journey = {
-  acts:[0,8,17,26,36],
+  acts,
   lamps:lampTimes,
   lanterns:[{time:26.5,x:355},{time:28.9,x:208},{time:30.6,x:512},
     {time:32.9,x:287},{time:35.3,x:557},{time:38.5,x:420}],
-  fireworks:36.4,
   closing:51,
 };
 const cameraKeys=[[0,1,640],[8,1.045,666],[15,1.073,682],[23,1.055,672],
@@ -280,7 +281,7 @@ export function journeyCamera(t,reduced){
   return [z+(nextZ-z)*progress,360,y+(nextY-y)*progress];
 }
 
-export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],low=false,reduceMotion=false,fade=0,cinematic=false}) {
+export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],sparkTime=t,waiting=false,low=false,reduceMotion=false,fade=0,cinematic=false}) {
   c.setTransform(c.canvas.width/WIDTH,0,0,c.canvas.height/HEIGHT,0,0);
   c.clearRect(0,0,WIDTH,HEIGHT);
   c.save();
@@ -320,6 +321,13 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
       lantern(c,x+Math.sin(t+i)*15,y,.34+rand(i)*.25,t+i);
     }
   }
+  if(cinematic&&scene===3&&t<journey.lanterns[0].time){
+    const lift=waiting?0:smooth((t-journey.acts[3])/.5);
+    c.save();
+    c.globalAlpha=.78*(1-lift);
+    lantern(c,journey.lanterns[0].x,740,1.12,reduceMotion?0:sparkTime);
+    c.restore();
+  }
   lanterns.forEach(l=>{
     const age=t-l.time;
     if(age>=0&&age<9){
@@ -345,7 +353,7 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
     if(closing>0)message(c,'Happy Diwali, '+names.to+'!','With love, '+names.from,1152,closing,52);
   }
   for(const s of sparks){
-    const a=t-s.time;
+    const a=sparkTime-s.time;
     if(a<0||a>.64)continue;
     c.save();c.globalAlpha=1-a/.64;
     const x=s.x+s.vx*a,y=s.y+s.vy*a+27*a*a,r=s.size;

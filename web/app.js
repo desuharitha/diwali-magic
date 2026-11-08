@@ -1,16 +1,17 @@
 import {WIDTH, HEIGHT, FPS, DURATION, SCENES, draw, timeline, lamps, rand, clamp, showCues, SHOW_LENGTH, FLIGHT, FIREWORK_LIFE, cameraAt, journey, journeyCamera} from './art.js';
+import {createJourney, greetingFragment, parseGreeting} from './journey.js';
 
 const $=id=>document.getElementById(id);
 const canvas=$('art'), ctx=canvas.getContext('2d',{alpha:false});
 const from=$('from'), to=$('to');
 const nameLimit=40;
-const params=new URLSearchParams(location.hash.slice(1));
+const linkNames=parseGreeting(location.hash);
 const readName=(value,fallback)=>Array.from(value?.trim()||'').slice(0,nameLimit).join('')||fallback;
 const defaults={from:'Lahari 🌹',to:'Pallavi'};
 const cleanNames=(sender,recipient)=>({from:readName(sender,defaults.from),to:readName(recipient,defaults.to)});
-let names=cleanNames(params.get('from'),params.get('to'));
+let names=cleanNames(linkNames?.from,linkNames?.to);
 from.value=names.from;to.value=names.to;
-const viewer=params.has('from')&&params.has('to');
+const viewer=!!linkNames;
 if(viewer){
   document.body.classList.add('viewer');
   $('recipient-title').textContent='Happy Diwali, '+names.to+'!';
@@ -24,6 +25,9 @@ let scene=0,start=performance.now(),lit=[],litAt=[],revealed=false,lanterns=[],b
 let audio, volume, music, muted=false, lastTrail=0, lastChime=0, lastFrame=0;
 let low=matchMedia('(pointer: coarse)').matches, frames=0, slowFrames=0;
 let playing=false, paused=false, heldAt=null, previousTime=-1;
+let story=createJourney(), storyFrame=story.update(0);
+const actHints=['Tap the house','Tap the diyas','Tap the rangoli','Tap the lantern','Tap the sky'];
+const cueHint=$('scene-cue');
 const invitation=$('invitation'), cinemaControls=$('cinema-controls');
 function holdClock(){
   if(heldAt===null)heldAt=performance.now();
@@ -213,7 +217,7 @@ function updateVolume(){
 }
 let screenLock=null, requestingScreen=false;
 function needsScreen(){
-  return playing&&!paused&&!document.hidden&&time()<journey.closing+2.4;
+  return playing&&!paused&&!document.hidden&&storyFrame.t<journey.closing+2.4;
 }
 async function keepScreenAwake(){
   if(!navigator.wakeLock||requestingScreen||screenLock||!needsScreen())return;
@@ -235,8 +239,11 @@ function beginJourney(){
   heldAt=null;
   go(0,true);
   previousTime=-1;playing=true;paused=false;
+  story=createJourney();storyFrame=story.update(0);
   invitation.hidden=true;cinemaControls.hidden=false;
   $('cinema-pause').textContent='Pause';
+  canvas.tabIndex=0;
+  canvas.focus({preventScroll:true});
   enableSound();updateVolume();keepScreenAwake();
 }
 $('begin').onclick=beginJourney;
@@ -244,7 +251,8 @@ $('cinema-replay').onclick=beginJourney;
 $('cinema-exit').onclick=()=>{
   playing=false;paused=false;heldAt=null;releaseScreen();
   go(0,true);updateVolume();
-  invitation.hidden=false;cinemaControls.hidden=true;
+  invitation.hidden=false;cinemaControls.hidden=true;cueHint.hidden=true;
+  canvas.removeAttribute('tabindex');
   $('begin').focus({preventScroll:true});
 };
 $('cinema-pause').onclick=()=>{
@@ -260,29 +268,46 @@ document.addEventListener('visibilitychange',()=>{
   else if(!paused){releaseClock();keepScreenAwake();}
   updateVolume();
 });
-function advanceJourney(t){
-  scene=journey.acts.findLastIndex(mark=>t>=mark);
+function advanceJourney(now,tap=false){
+  storyFrame=story.update(now,tap);
+  const {act,t,waiting,events}=storyFrame;
+  scene=act;
+  if(waiting&&cueHint.textContent!==actHints[act])cueHint.textContent=actHints[act];
+  cueHint.hidden=!waiting;
+  for(const cue of events){
+    if(cue===0||cue===2)chime(.04);
+    if(cue===4)startShow(journey.acts[4]);
+  }
   journey.lamps.forEach((mark,i)=>{
-    if(litAt[i]===undefined&&t>=mark){litAt[i]=mark;chime(.034);}
+    if(litAt[i]===undefined&&t>=mark){litAt[i]=mark;chime(.027);}
   });
-  if(previousTime<journey.acts[2]&&t>=journey.acts[2])chime(.044);
   for(const release of journey.lanterns){
     if(previousTime<release.time&&t>=release.time)tone(523.25,.034,.9);
   }
-  if(previousTime<journey.fireworks&&t>=journey.fireworks)startShow(journey.fireworks);
   if(scene===4)advanceShow(t);
   if(t>=journey.closing+2.4&&previousTime<journey.closing+2.4)releaseScreen();
   previousTime=t;
+  return events;
 }
 function interactJourney(point){
   if(!playing||paused)return;
-  const t=time(),[x,y]=point;
+  const now=time();
+  const justActivated=advanceJourney(now);
+  const {act,t,waiting}=storyFrame;
+  if(!point){if(waiting)advanceJourney(now,true);else if(act===4&&!justActivated.includes(4))userFirework(null,t);return;}
+  const [x,y]=point;
   if(!reduced.matches)trail(x,y,9);
-  if(scene===4&&y<HEIGHT*.57){userFirework(point,t);return;}
   const [scale,cx,cy]=journeyCamera(t,reduced.matches);
-  const lamp=lamps.findIndex(([lx,ly],i)=>litAt[i]===undefined&&t<journey.lamps[i]&&
-    Math.hypot(lx-cx-(x-WIDTH/2)/scale,ly-cy-(y-HEIGHT/2)/scale)<51);
-  if(lamp>=0){litAt[lamp]=t;chime(.047);}
+  const wx=cx+(x-WIDTH/2)/scale, wy=cy+(y-HEIGHT/2)/scale;
+  const targets=[
+    wx>92&&wx<638&&wy>490&&wy<795,
+    lamps.some(([lx,ly])=>Math.hypot(lx-wx,ly-wy)<68),
+    Math.hypot((wx-360)*.7,wy-1027)<110,
+    Math.hypot(wx-355,wy-740)<95,
+    wy<675,
+  ];
+  if(waiting&&targets[act]){advanceJourney(now,true);return;}
+  if(!waiting&&act===4&&targets[4]&&!justActivated.includes(4))userFirework(point,t);
 }
 function stagePoint(e){
   const r=canvas.getBoundingClientRect();
@@ -293,7 +318,7 @@ canvas.addEventListener('pointermove',e=>{
   const now=performance.now();
   if(reduced.matches||now-lastTrail<30)return;
   lastTrail=now;trail(...stagePoint(e),low?2:4);
-  if(now-lastChime>125){lastChime=now;chime(.012);}
+  if(now-lastChime>145){lastChime=now;chime(.013);}
 });
 canvas.addEventListener('pointerdown',e=>{
   if(e.isPrimary&&e.button===0){canvas.setPointerCapture(e.pointerId);(viewer?interactJourney:interact)(stagePoint(e));}
@@ -302,7 +327,11 @@ $('previous').onclick=()=>{enableSound();go(scene-1);};
 $('next').onclick=()=>{enableSound();go(scene+1);};
 $('action').onclick=()=>interact();
 window.addEventListener('keydown',e=>{
-  if(viewer||e.repeat||e.altKey||e.ctrlKey||e.metaKey||e.target.closest?.('input,select,textarea'))return;
+  if(viewer){
+    if(!e.repeat&&e.target===canvas&&(e.key===' '||e.key==='Enter')){e.preventDefault();interactJourney();}
+    return;
+  }
+  if(e.repeat||e.altKey||e.ctrlKey||e.metaKey||e.target.closest?.('input,select,textarea'))return;
   if((e.key===' '||e.key==='Enter')&&e.target.closest?.('button,a'))return;
   if(['ArrowLeft','ArrowRight',' ','Enter'].includes(e.key)){
     e.preventDefault();enableSound();
@@ -322,7 +351,8 @@ const updateNames=()=>{
 from.addEventListener('input',updateNames);to.addEventListener('input',updateNames);
 function greetingUrl(){
   const url=new URL(location.href);
-  url.hash=new URLSearchParams(names).toString();
+  url.search='';
+  url.hash=greetingFragment(names);
   return url;
 }
 function showLink(){
@@ -359,8 +389,9 @@ $('restart').onclick=()=>{enableSound();go(0,true);canvas.scrollIntoView({block:
 function animate(now){
   requestAnimationFrame(animate);
   if(document.hidden||now-lastFrame<31)return;
-  const t=viewer&&!playing?0:time();
-  if(viewer&&playing&&!paused)advanceJourney(t);
+  const elapsed=time();
+  if(viewer&&playing&&!paused)advanceJourney(elapsed);
+  const t=viewer?(playing?storyFrame.t:0):elapsed;
   if(!viewer&&scene===4)advanceShow(t);
   if(!paused)playBursts(t);
   if(exporting)return;
@@ -370,7 +401,7 @@ function animate(now){
   const width=low?450:720;
   if(canvas.width!==width){canvas.width=width;canvas.height=width*16/9;}
   draw(ctx,{scene,t,names,lit,litAt,revealed,lanterns:viewer?journey.lanterns:lanterns,
-    bursts,sparks,low,reduceMotion:reduced.matches,cinematic:viewer});
+    bursts,sparks,sparkTime:elapsed,waiting:viewer&&playing&&storyFrame.waiting,low,reduceMotion:reduced.matches,cinematic:viewer});
 }
 let exporting=false;
 const filename=({from,to})=>{

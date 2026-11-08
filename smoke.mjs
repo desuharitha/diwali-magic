@@ -1,3 +1,4 @@
+import {parseGreeting} from './web/journey.js';
 import assert from 'node:assert/strict';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {writeFile} from 'node:fs/promises';
@@ -29,7 +30,7 @@ await withBrowser(chrome,url,async({send,evaluate})=>{
     document.querySelector('#to').dispatchEvent(new Event('input'))`);
   await click('generate');
   const share=await evaluate('document.querySelector("#link").value');
-  assert.equal(new URLSearchParams(new URL(share).hash.slice(1)).get('to'),'Asha & Noor');
+  assert.equal(parseGreeting(new URL(share).hash).to,'Asha & Noor');
 
   await evaluate('document.activeElement.blur()');
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39});

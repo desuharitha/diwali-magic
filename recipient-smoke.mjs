@@ -63,7 +63,7 @@ await withBrowser(chrome,url.href,async({send,evaluate})=>{
       return connect.call(this,destination,...args);
     };
   })()`);
-  const fps=12, intro=1.25, duration=58;
+  const fps=12, intro=1.25, duration=63;
   const started=performance.now();
   let frame=0, tapped=false, sampled=-1, lastJpeg, sawLamp=false, sawWish=false, sawLantern=false;
   let sawRocket=false,sawClosing=false,sawAmbient=false;
@@ -146,14 +146,9 @@ await withBrowser(chrome,url.href,async({send,evaluate})=>{
   await click('cinema-replay');
   await sleep(150);
   assert.equal(await evaluate('window.recipientProbe.lamps'),0);
-  await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
-  const [left,top,width,height]=opening.position;
-  await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:left+width/2,y:top+height*887/1280}]});
-  await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  await sleep(160);
-  assert.equal(await evaluate('window.recipientProbe.lamps'),1,'A tap should light a diya ahead of its cue.');
+  assert.equal(await evaluate("document.querySelector('#scene-cue').textContent"),'Tap the house');
   await click('cinema-exit');
   assert.equal(await evaluate("document.querySelector('#invitation').hidden"),false);
-  console.log('Verified one tap, five continuous acts, automatic and ambient fireworks, closing names, stable portrait layout, active audio, pause, replay, early diya lighting, screen lock lifecycle and exit.');
+  console.log('Verified one tap, five continuous acts, automatic and ambient fireworks, closing names, stable portrait layout, active audio, pause, replay, screen lock lifecycle and exit.');
 });
 
