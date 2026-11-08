@@ -15,7 +15,7 @@ The link opens with the personalized greeting and hides the creator interface. T
 - In the finale, the first tap launches a firework at that point and starts a crescendo. More taps add fireworks. A softer ambient display continues after the grand finale until **Stop fireworks**, **Replay show**, or a scene change.
 - Use the arrow buttons, number tabs, or keyboard Left and Right to choose a scene. Space or Enter activates the focused control or the scene action. **Replay greeting** starts the greeting again.
 
-The interactive greeting follows the recipient’s pace. Supported Android devices may vibrate briefly for user-triggered bursts. Device settings, browser support, and reduced-motion preferences affect vibration. Audio starts after an eligible gesture. The app reduces drawing resolution and particle density on smaller or slower devices.
+On a personalized link, **Tap to begin** starts all five acts. The house lights up, diyas ignite, the rangoli appears, lanterns rise, and the fireworks start automatically. Replay starts the whole journey again, Pause holds the current moment, and Exit returns to the invitation. Creator mode keeps scene-by-scene preview controls. Supported Android devices may vibrate briefly for user-triggered bursts. Device settings, browser support, and reduced-motion preferences affect vibration. Audio starts after an eligible gesture. The app reduces drawing resolution and particle density on smaller or slower devices.
 
 ## Run locally and download MP4
 

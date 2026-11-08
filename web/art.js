@@ -22,7 +22,7 @@ const exportBursts = [
 export const colors = ['#ffce83','#ff879f','#92efe0','#cbaaff','#ff9f69'];
 export const lamps = [[124,931],[231,901],[360,887],[489,901],[596,931]];
 export const clamp = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi,x));
-const smooth = x => { x = clamp(x); return x*x*(3-2*x); };
+export const smooth = x => { x = clamp(x); return x*x*(3-2*x); };
 export const rand = n => {
   const v = Math.sin(n*127.1 + 78.233)*43758.5453;
   return v - Math.floor(v);
@@ -174,10 +174,10 @@ function diya(c,x,y,s,lit,t,ignition=1) {
   }
   c.restore();
 }
-function rangoli(c,t,bright) {
+function rangoli(c,t,brightness) {
   c.save();c.translate(360,1027);c.scale(1,.62);c.rotate(t*.07);
-  const r=bright?140:102;
-  c.globalAlpha=bright?.93:.27;
+  const r=102+38*brightness;
+  c.globalAlpha=.27+(.66+.06*Math.sin(t*2.1))*brightness;
   glow(c,0,0,r*1.6,'#f49c574c');
   for(let i=0;i<16;i++){
     c.rotate(Math.PI/8);
@@ -260,11 +260,31 @@ export function cameraAt(scene,t,reduceMotion){
   return [scale,cx,clamp(cy,HEIGHT/2/scale,HEIGHT-HEIGHT/2/scale)];
 }
 
-export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],low=false,reduceMotion=false,fade=0}) {
+// Recipient cues use one clock across the five acts and the ambient closing.
+export const journey = {
+  acts:[0,8,17,26,36],
+  lamps:lampTimes,
+  lanterns:[{time:26.5,x:355},{time:28.9,x:208},{time:30.6,x:512},
+    {time:32.9,x:287},{time:35.3,x:557},{time:38.5,x:420}],
+  fireworks:36.4,
+  closing:51,
+};
+const cameraKeys=[[0,1,640],[8,1.045,666],[15,1.073,682],[23,1.055,672],
+  [33,1.03,632],[39,1,640]];
+export function journeyCamera(t,reduced){
+  if(reduced)return [1,360,640];
+  const i=cameraKeys.findIndex(key=>key[0]>t);
+  if(i<0)return [1,360,640];
+  const [start,z,y]=cameraKeys[i-1], [end,nextZ,nextY]=cameraKeys[i];
+  const progress=smooth((t-start)/(end-start));
+  return [z+(nextZ-z)*progress,360,y+(nextY-y)*progress];
+}
+
+export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],low=false,reduceMotion=false,fade=0,cinematic=false}) {
   c.setTransform(c.canvas.width/WIDTH,0,0,c.canvas.height/HEIGHT,0,0);
   c.clearRect(0,0,WIDTH,HEIGHT);
   c.save();
-  const [scale,cx,cy]=cameraAt(scene,t,reduceMotion);
+  const [scale,cx,cy]=cinematic?journeyCamera(t,reduceMotion):cameraAt(scene,t,reduceMotion);
   c.translate(WIDTH/2,HEIGHT/2);c.scale(scale,scale);
   c.translate(-cx,-cy);
   if(scene===4&&bursts.length){
@@ -272,13 +292,28 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
     for(const b of bursts)if(b.depth==='far')firework(c,b,t,low||reduceMotion);
     c.drawImage(courtyardLayer,0,0);
   }else c.drawImage(plate,0,0);
-  rangoli(c,reduceMotion?0:t,scene>=3||revealed);
-  if(scene!==1)lamps.forEach(([x,y],i)=>diya(c,x,y,.70,scene>=2,t+i));
-  if(scene===1){
+  if(cinematic&&t<15){
+    const shade=c.createLinearGradient(0,420,0,870);
+    shade.addColorStop(0,'transparent');shade.addColorStop(.53,'#160d2b');
+    shade.addColorStop(1,'transparent');
+    c.save();c.globalAlpha=.53*(1-smooth((t-.5)/14.5));
+    rect(c,0,420,WIDTH,450,shade);c.restore();
+  }
+  const rangoliLight=cinematic?smooth((t-journey.acts[2])/4):Number(scene>=3||revealed);
+  rangoli(c,reduceMotion?0:t,rangoliLight);
+  if(cinematic){
+    lamps.forEach(([x,y],i)=>{
+      const ignition=litAt[i]??journey.lamps[i];
+      const size=.70+(.15+(i===2?.26:0))*smooth((t-5)/5)*(1-smooth((t-16)/5));
+      diya(c,x,y,size,t>=ignition,t+i,.18+.82*smooth((t-ignition)/.7));
+    });
+  }
+  if(!cinematic&&scene!==1)lamps.forEach(([x,y],i)=>diya(c,x,y,.70,scene>=2,t+i));
+  if(!cinematic&&scene===1){
     lamps.forEach(([x,y],i)=>diya(c,x,y,i===2?1.28:.78,lit.includes(i),t+i,.2+.8*smooth((t-(litAt[i]??-1))/.52)));
     for(let i=0;i<6;i++)diya(c,185+i*70,788,.42,lit.length>i%5,t);
   }
-  if(scene>=3){
+  if(!cinematic&&scene>=3){
     const count=scene===4?7:3;
     for(let i=0;i<count;i++) {
       const x=115+i*(scene===4?83:238),y=555-((t*(17+i)+i*71)%435);
@@ -287,17 +322,28 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
   }
   lanterns.forEach(l=>{
     const age=t-l.time;
-    if(age>=0&&age<8)lantern(c,l.x+Math.sin(age)*18,740-age*82,1.12-age*.068,t);
+    if(age>=0&&age<9){
+      c.save();
+      if(cinematic)c.globalAlpha=smooth(age/.55)*(1-smooth((age-7.6)/1.4));
+      lantern(c,l.x+(reduceMotion?0:Math.sin(age)*18),740-age*(reduceMotion?65:82),1.12-age*.068,t);
+      c.restore();
+    }
   });
   c.translate(reduceMotion?0:Math.sin(t*.24)*4,0);
   c.drawImage(foliageLayer,0,0);
   c.restore();
-  if(scene===0)message(c,'Diwali Magic','A festival of light and little wonders',179,smooth(t/.9),58);
-  if(scene===1&&lit.length===0)message(c,'Light the diyas','One small flame can light up a courtyard',178,smooth(t/.6),52);
-  if(scene===2&&revealed)message(c,'Happy Diwali, '+names.to+'!','May every little spark bring a new reason to smile.',170,1,59);
-  if(scene===3)message(c,'Send a wish into the sky','Let it rise with the lanterns',174,smooth(t/.6),50);
+  if(!cinematic&&scene===0)message(c,'Diwali Magic','A festival of light and little wonders',179,smooth(t/.9),58);
+  if(!cinematic&&scene===1&&lit.length===0)message(c,'Light the diyas','One small flame can light up a courtyard',178,smooth(t/.6),52);
+  if(!cinematic&&scene===2&&revealed)message(c,'Happy Diwali, '+names.to+'!','May every little spark bring a new reason to smile.',170,1,59);
+  if(!cinematic&&scene===3)message(c,'Send a wish into the sky','Let it rise with the lanterns',174,smooth(t/.6),50);
   for(const b of bursts)if(b.depth!=='far')firework(c,b,t,low||reduceMotion);
-  if(scene===4&&t>2.4)message(c,'Happy Diwali, '+names.to+'!','With love, '+names.from,1152,smooth((t-2.4)/.9),52);
+  if(!cinematic&&scene===4&&t>2.4)message(c,'Happy Diwali, '+names.to+'!','With love, '+names.from,1152,smooth((t-2.4)/.9),52);
+  if(cinematic){
+    const wish=smooth((t-19)/2.2)*(1-smooth((t-25)/2.4));
+    if(wish>0)message(c,'Happy Diwali, '+names.to+'!','May every little spark bring a new reason to smile.',178,wish,55);
+    const closing=smooth((t-journey.closing)/2.4);
+    if(closing>0)message(c,'Happy Diwali, '+names.to+'!','With love, '+names.from,1152,closing,52);
+  }
   for(const s of sparks){
     const a=t-s.time;
     if(a<0||a>.64)continue;

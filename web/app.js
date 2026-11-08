@@ -1,4 +1,4 @@
-import {WIDTH, HEIGHT, FPS, DURATION, SCENES, draw, timeline, lamps, rand, clamp, showCues, SHOW_LENGTH, FLIGHT, FIREWORK_LIFE, cameraAt} from './art.js';
+import {WIDTH, HEIGHT, FPS, DURATION, SCENES, draw, timeline, lamps, rand, clamp, showCues, SHOW_LENGTH, FLIGHT, FIREWORK_LIFE, cameraAt, journey, journeyCamera} from './art.js';
 
 const $=id=>document.getElementById(id);
 const canvas=$('art'), ctx=canvas.getContext('2d',{alpha:false});
@@ -10,25 +10,34 @@ const defaults={from:'Lahari 🌹',to:'Pallavi'};
 const cleanNames=(sender,recipient)=>({from:readName(sender,defaults.from),to:readName(recipient,defaults.to)});
 let names=cleanNames(params.get('from'),params.get('to'));
 from.value=names.from;to.value=names.to;
-if(params.has('from')&&params.has('to')){
+const viewer=params.has('from')&&params.has('to');
+if(viewer){
   document.body.classList.add('viewer');
   $('recipient-title').textContent='Happy Diwali, '+names.to+'!';
   $('recipient-from').textContent='With love, '+names.from;
   document.title='Happy Diwali, '+names.to+'!';
+  $('cinema-controls').insertBefore($('sound'),$('cinema-exit'));
 }
 document.documentElement.classList.add('ready');
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 let scene=0,start=performance.now(),lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],seed=0;
 let audio, volume, music, muted=false, lastTrail=0, lastChime=0, lastFrame=0;
 let low=matchMedia('(pointer: coarse)').matches, frames=0, slowFrames=0;
-const effects=new Set();
+let playing=false, paused=false, heldAt=null, previousTime=-1;
+const invitation=$('invitation'), cinemaControls=$('cinema-controls');
+function holdClock(){
+  if(heldAt===null)heldAt=performance.now();
+}
+function releaseClock(){
+  if(heldAt!==null){start+=performance.now()-heldAt;heldAt=null;}
+}
 const finaleStatus=$('finale-status');
 let showStart=null, nextCue=0, ambientAt=Infinity, ambientIndex=0, showRunning=false, lastUserBurst=-Infinity, lastVibration=-Infinity;
-const time=()=> (performance.now()-start)/1000;
+const time=()=> ((heldAt??performance.now())-start)/1000;
 const melody=[261.63,329.63,392,440,392,329.63,293.66,261.63,220,261.63,329.63,392,349.23,329.63,293.66,220];
 
 function tone(hz,level,duration,offset=0,type='sine') {
-  if(!audio||audio.state==='closed'||muted)return;
+  if(!audio||audio.state==='closed'||muted||(viewer&&(!playing||paused)))return;
   const at=audio.currentTime+offset, osc=audio.createOscillator(), gain=audio.createGain();
   osc.type=type;osc.frequency.value=hz;
   gain.gain.setValueAtTime(.0001,at);
@@ -46,7 +55,7 @@ function enableSound(){
     if(!music){
       let beat=0;
       music=setInterval(()=>{
-        if(document.hidden||muted||audio.state!=='running')return;
+        if(document.hidden||muted||audio.state!=='running'||(viewer&&(!playing||paused)))return;
         const note=melody[beat%melody.length];
         tone(note,.036,1.05);tone(note*2,.008,.52);
         if(beat%4===0)tone(note/2,.037,2.1);
@@ -63,7 +72,7 @@ function chime(strength=.023){
 $('sound').onclick=()=>{
   muted=!muted;$('sound').textContent=muted?'Sound off':'Sound on';
   $('sound').setAttribute('aria-pressed',String(!muted));
-  if(volume)volume.gain.setTargetAtTime(muted?0:.72,audio.currentTime,.02);
+  updateVolume();
   if(!muted)enableSound();
 };
 const stepButtons=SCENES.map(([label],i)=>{
@@ -122,15 +131,18 @@ function interact(point){
     lanterns=lanterns.filter(l=>t-l.time<8).slice(-5);
     lanterns.push({x:clamp(x,64,WIDTH-64),time:t});tone(523.25,.06,.95);chime();return;
   }
-  if(t-lastUserBurst<.18)return;
+  userFirework(point,t);
+  if(showStart===null)startShow(t);
+}
+function userFirework(point,t){
+  if(t-lastUserBurst<.14)return;
   lastUserBurst=t;
   const k=seed++;
   const active=bursts.filter(b=>b.major&&t-b.time<FIREWORK_LIFE);
   if(active.length>=(low?3:5))bursts.splice(bursts.indexOf(active[0]),1);
-  launchFirework({x:point?clamp(x,0,WIDTH):125+rand(k)*(WIDTH-250),
-    y:point?clamp(y,0,HEIGHT):210+rand(k+9)*240,time:t,seed:k,
+  launchFirework({x:point?.[0]??125+rand(k)*(WIDTH-250),
+    y:point?.[1]??210+rand(k+9)*240,time:t,seed:k,
     depth:'near',palette:k%5,scale:1.22,major:true},t);
-  if(showStart===null)startShow(t);
 }
 function refreshFinale(){
   if(scene!==4)return;
@@ -138,7 +150,7 @@ function refreshFinale(){
   $('stop-show').disabled=!showRunning&&!bursts.length;
 }
 function resetFireworks(status){
-  effects.forEach(clearTimeout);effects.clear();navigator.vibrate?.(0);
+  navigator.vibrate?.(0);
   bursts=[];showStart=null;nextCue=0;ambientAt=Infinity;ambientIndex=0;showRunning=false;lastUserBurst=-Infinity;
   finaleStatus.textContent=status;
   refreshFinale();
@@ -148,23 +160,28 @@ function startShow(t){
   finaleStatus.textContent='Automatic fireworks playing.';
   refreshFinale();
 }
+function fireworkLevel(burst){
+  return burst.major?1:burst.depth==='far'?.34:.56;
+}
 function launchFirework(burst,now){
   bursts.push(burst);
-  const remaining=burst.time+FLIGHT-now;
-  if(remaining<=0)return;
-  const level=burst.major?1:burst.depth==='far'?.34:.56;
-  tone(620+burst.palette*45,.03*level,.24);
-  const id=setTimeout(()=>{
-    effects.delete(id);
-    if(document.hidden)return;
+  if(now<burst.time+FLIGHT)tone(620+burst.palette*45,.03*fireworkLevel(burst),.24);
+  refreshFinale();
+}
+function playBursts(t){
+  for(const burst of bursts){
+    const age=t-burst.time-FLIGHT;
+    if(burst.sounded||age<0)continue;
+    burst.sounded=true;
+    if(age>.18)continue;
+    const level=fireworkLevel(burst);
     tone(63+burst.palette*7,.087*level,.35,0,'triangle');
     chime(.042*level);
-    if(burst.major&&!reduced.matches&&/Android/i.test(navigator.userAgent)&&time()-lastVibration>=.65){
-      lastVibration=time();
+    if(burst.major&&!reduced.matches&&/Android/i.test(navigator.userAgent)&&t-lastVibration>=.65){
+      lastVibration=t;
       navigator.vibrate?.([44,34,58]);
     }
-  },remaining*1000);
-  refreshFinale();
+  }
 }
 function advanceShow(t){
   const hadBursts=bursts.length>0;
@@ -190,25 +207,81 @@ $('replay-show').onclick=()=>{
   resetFireworks('');
   startShow(time());
 };
+function updateVolume(){
+  if(volume)volume.gain.setTargetAtTime(muted||(viewer&&(!playing||paused||document.hidden))?0:.72,
+    audio.currentTime,.025);
+}
+function beginJourney(){
+  heldAt=null;
+  go(0,true);
+  previousTime=-1;playing=true;paused=false;
+  invitation.hidden=true;cinemaControls.hidden=false;
+  $('cinema-pause').textContent='Pause';
+  enableSound();updateVolume();
+}
+$('begin').onclick=beginJourney;
+$('cinema-replay').onclick=beginJourney;
+$('cinema-exit').onclick=()=>{
+  playing=false;paused=false;heldAt=null;
+  go(0,true);updateVolume();
+  invitation.hidden=false;cinemaControls.hidden=true;
+  $('begin').focus({preventScroll:true});
+};
+$('cinema-pause').onclick=()=>{
+  paused=!paused;
+  if(paused){holdClock();navigator.vibrate?.(0);}
+  else if(!document.hidden){releaseClock();enableSound();}
+  $('cinema-pause').textContent=paused?'Resume':'Pause';
+  updateVolume();
+};
+document.addEventListener('visibilitychange',()=>{
+  if(!viewer||!playing)return;
+  if(document.hidden)holdClock();
+  else if(!paused)releaseClock();
+  updateVolume();
+});
+function advanceJourney(t){
+  scene=journey.acts.findLastIndex(mark=>t>=mark);
+  journey.lamps.forEach((mark,i)=>{
+    if(litAt[i]===undefined&&t>=mark){litAt[i]=mark;chime(.034);}
+  });
+  if(previousTime<journey.acts[2]&&t>=journey.acts[2])chime(.044);
+  for(const release of journey.lanterns){
+    if(previousTime<release.time&&t>=release.time)tone(523.25,.034,.9);
+  }
+  if(previousTime<journey.fireworks&&t>=journey.fireworks)startShow(journey.fireworks);
+  if(scene===4)advanceShow(t);
+  previousTime=t;
+}
+function interactJourney(point){
+  if(!playing||paused)return;
+  const t=time(),[x,y]=point;
+  if(!reduced.matches)trail(x,y,9);
+  if(scene===4&&y<HEIGHT*.57){userFirework(point,t);return;}
+  const [scale,cx,cy]=journeyCamera(t,reduced.matches);
+  const lamp=lamps.findIndex(([lx,ly],i)=>litAt[i]===undefined&&t<journey.lamps[i]&&
+    Math.hypot(lx-cx-(x-WIDTH/2)/scale,ly-cy-(y-HEIGHT/2)/scale)<51);
+  if(lamp>=0){litAt[lamp]=t;chime(.047);}
+}
 function stagePoint(e){
   const r=canvas.getBoundingClientRect();
   return [(e.clientX-r.left)*WIDTH/r.width,(e.clientY-r.top)*HEIGHT/r.height];
 }
 canvas.addEventListener('pointermove',e=>{
-  if(e.pointerType==='touch'&&!e.buttons)return;
+  if((viewer&&(!playing||paused))||(e.pointerType==='touch'&&!e.buttons))return;
   const now=performance.now();
   if(reduced.matches||now-lastTrail<30)return;
   lastTrail=now;trail(...stagePoint(e),low?2:4);
   if(now-lastChime>125){lastChime=now;chime(.012);}
 });
 canvas.addEventListener('pointerdown',e=>{
-  if(e.isPrimary&&e.button===0){canvas.setPointerCapture(e.pointerId);interact(stagePoint(e));}
+  if(e.isPrimary&&e.button===0){canvas.setPointerCapture(e.pointerId);(viewer?interactJourney:interact)(stagePoint(e));}
 });
 $('previous').onclick=()=>{enableSound();go(scene-1);};
 $('next').onclick=()=>{enableSound();go(scene+1);};
 $('action').onclick=()=>interact();
 window.addEventListener('keydown',e=>{
-  if(e.repeat||e.altKey||e.ctrlKey||e.metaKey||e.target.closest?.('input,select,textarea'))return;
+  if(viewer||e.repeat||e.altKey||e.ctrlKey||e.metaKey||e.target.closest?.('input,select,textarea'))return;
   if((e.key===' '||e.key==='Enter')&&e.target.closest?.('button,a'))return;
   if(['ArrowLeft','ArrowRight',' ','Enter'].includes(e.key)){
     e.preventDefault();enableSound();
@@ -265,15 +338,18 @@ $('restart').onclick=()=>{enableSound();go(0,true);canvas.scrollIntoView({block:
 function animate(now){
   requestAnimationFrame(animate);
   if(document.hidden||now-lastFrame<31)return;
-  const t=time();
-  if(scene===4)advanceShow(t);
+  const t=viewer&&!playing?0:time();
+  if(viewer&&playing&&!paused)advanceJourney(t);
+  if(!viewer&&scene===4)advanceShow(t);
+  if(!paused)playBursts(t);
   if(exporting)return;
   if(lastFrame&&now-lastFrame>46)slowFrames++;
   if(++frames===75){if(slowFrames>16)low=true;frames=0;slowFrames=0;}
   lastFrame=now;
   const width=low?450:720;
   if(canvas.width!==width){canvas.width=width;canvas.height=width*16/9;}
-  draw(ctx,{scene,t,names,lit,litAt,revealed,lanterns,bursts,sparks,low,reduceMotion:reduced.matches});
+  draw(ctx,{scene,t,names,lit,litAt,revealed,lanterns:viewer?journey.lanterns:lanterns,
+    bursts,sparks,low,reduceMotion:reduced.matches,cinematic:viewer});
 }
 let exporting=false;
 const filename=({from,to})=>{

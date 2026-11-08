@@ -18,13 +18,21 @@
       <button class="gold" type="submit">Open the greeting <span aria-hidden="true">↗</span></button>
     </form>
   </section>
-  <section class="recipient-welcome" aria-label="Your Diwali greeting">
-    <p class="eyebrow">THE FESTIVAL OF LIGHTS</p><h1 id="recipient-title"></h1>
-    <p>May your life glow with happiness, laughter, love, and beautiful moments.</p>
-    <p id="recipient-from"></p>
-  </section>
   <section class="experience" aria-label="Interactive greeting">
-    <div class="stage"><canvas id="art" width="720" height="1280" aria-label="Animated Diwali courtyard"></canvas><span id="chapter"></span></div>
+    <div class="stage">
+      <canvas id="art" width="720" height="1280" aria-label="Animated Diwali courtyard"></canvas><span id="chapter"></span>
+      <section class="recipient-welcome" id="invitation" aria-label="Your Diwali greeting">
+        <p class="eyebrow">THE FESTIVAL OF LIGHTS</p><h1 id="recipient-title"></h1>
+        <p>A little light, sent with love.</p>
+        <p id="recipient-from"></p>
+        <button id="begin" class="gold" type="button">Tap to begin</button>
+      </section>
+    </div>
+    <div id="cinema-controls" aria-label="Playback controls" hidden>
+      <button id="cinema-replay" type="button">Replay</button>
+      <button id="cinema-pause" type="button">Pause</button>
+      <button id="cinema-exit" type="button">Exit</button>
+    </div>
     <div class="controls">
       <div><strong id="scene"></strong><p id="hint"></p></div>
       <div class="buttons"><button id="previous" type="button" aria-label="Previous scene">←</button><button id="action" class="gold" type="button"></button><button id="next" type="button" aria-label="Next scene">→</button></div>
