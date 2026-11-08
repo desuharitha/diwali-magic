@@ -31,7 +31,7 @@ await withBrowser(chrome,url.href,async({send,evaluate})=>{
       return lock;
     }}});
     const proto=CanvasRenderingContext2D.prototype;
-    const clear=proto.clearRect, text=proto.fillText, ellipse=proto.ellipse;
+    const clear=proto.clearRect, text=proto.fillText, ellipse=proto.ellipse, draw=proto.drawImage;
     window.recipientProbe={texts:[],lamps:0,lanterns:0,rockets:0};
     proto.clearRect=function(...args){
       if(this.canvas.id==='art')Object.assign(window.recipientProbe,{texts:[],lamps:0,lanterns:0,rockets:0});
@@ -44,10 +44,13 @@ await withBrowser(chrome,url.href,async({send,evaluate})=>{
     proto.ellipse=function(x,y,rx,ry,...args){
       if(this.canvas.id==='art'){
         if(rx===3.5&&ry===6)window.recipientProbe.lamps++;
-        if(rx===15&&ry===3)window.recipientProbe.lanterns++;
         if(rx===2&&ry===2)window.recipientProbe.rockets++;
       }
       return ellipse.call(this,x,y,rx,ry,...args);
+    };
+    proto.drawImage=function(source,...args){
+      if(this.canvas.id==='art'&&source.width===144&&source.height===144)window.recipientProbe.lanterns++;
+      return draw.call(this,source,...args);
     };
     const connect=AudioNode.prototype.connect;
     AudioNode.prototype.connect=function(destination,...args){

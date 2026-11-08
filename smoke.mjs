@@ -76,7 +76,7 @@ await withBrowser(chrome,url,async({send,evaluate})=>{
   assert.equal(await get('finale-status'),'Automatic fireworks playing.');
   await sleep(450);
   assert.ok(await evaluate('window.rockets.some(r=>Math.abs(r.x-475)<17)'));
-  assert.deepEqual(await evaluate('window.vibrations'),[[44,34,58]]);
+  assert.deepEqual(await evaluate('window.vibrations'),[[16,28,20]]);
   await sleep(350);
   assert.ok(await evaluate('window.rockets.some(r=>Math.abs(r.x-199)<17)'));
   assert.equal(await evaluate('window.vibrations.length'),1);

@@ -42,7 +42,7 @@ function releaseClock(){
   if(heldAt!==null){start+=performance.now()-heldAt;heldAt=null;}
 }
 const finaleStatus=$('finale-status');
-let showStart=null, nextCue=0, ambientAt=Infinity, ambientIndex=0, showRunning=false, lastUserBurst=-Infinity, lastVibration=-Infinity;
+let showStart=null, nextCue=0, ambientAt=Infinity, ambientIndex=0, showRunning=false, lastUserBurst=-Infinity;
 const time=()=> ((heldAt??performance.now())-start)/1000;
 const melody=[261.63,329.63,392,440,392,329.63,293.66,261.63,220,261.63,329.63,392,349.23,329.63,293.66,220];
 
@@ -156,7 +156,6 @@ function go(i,restart=false){
   if(restart){lit=[];revealed=false;}
   scene=clamp(i,0,4);start=performance.now();litAt=[];lanterns=[];bursts=[];sparks=[];
   resetFireworks('');
-  lastVibration=-Infinity;
   refresh();
 }
 function trail(x,y,n){
@@ -167,27 +166,33 @@ function trail(x,y,n){
     sparks.push({x,y,time:t,vx:(rand(k)-.5)*110,vy:(rand(k+2)-.65)*100,size:1.5+rand(k+8)*3});
   }
 }
+function haptic(pattern){
+  if(typeof navigator.vibrate!=='function')return;
+  if(pattern!==0&&(reduced.matches||document.hidden))return;
+  try{navigator.vibrate(pattern);}catch{/* Device or browser declined vibration. */}
+}
+const activationHaptics=[18,0,22,16,[16,28,20]];
 function interact(point){
   enableSound();
   const t=time();
   const [x,y]=point||[WIDTH/2,HEIGHT*.68];
   if(!reduced.matches)trail(x,y,9);
-  if(scene===0){if(!point)go(1);chime();return;}
+  if(scene===0){if(!point){go(1);haptic(18);}chime();return;}
   if(scene===1){
     if(lit.length===5){if(!point)go(2);return;}
     const [scale,cx,cy]=cameraAt(scene,t,reduced.matches);
     const lamp=point?hitDiya(cx+(x-WIDTH/2)/scale,cy+(y-HEIGHT/2)/scale)
       :lamps.findIndex((_,i)=>!lit.includes(i));
     if(lamp<0||lit.includes(lamp))return;
-    lit.push(lamp);litAt[lamp]=t;diyaSound();refresh();return;
+    lit.push(lamp);litAt[lamp]=t;diyaSound();haptic(12);refresh();return;
   }
   if(scene===2){
     if(revealed){if(!point)go(3);return;}
-    revealed=true;chime(.052);refresh();return;
+    revealed=true;chime(.052);haptic(22);refresh();return;
   }
   if(scene===3){
     lanterns=lanterns.filter(l=>t-l.time<8).slice(-5);
-    lanterns.push({x:clamp(x,64,WIDTH-64),time:t});tone(523.25,.06,.95);chime();return;
+    lanterns.push({x:clamp(x,64,WIDTH-64),time:t});tone(523.25,.06,.95);chime();haptic(16);return;
   }
   userFirework(point,t);
   if(showStart===null)startShow(t);
@@ -201,6 +206,7 @@ function userFirework(point,t){
   launchFirework({x:point?.[0]??125+rand(k)*(WIDTH-250),
     y:point?.[1]??210+rand(k+9)*240,time:t,seed:k,
     depth:'near',palette:k%5,scale:1.22,major:true});
+  haptic(activationHaptics[4]);
 }
 function refreshFinale(){
   if(scene!==4)return;
@@ -209,7 +215,7 @@ function refreshFinale(){
 }
 function resetFireworks(status){
   stopSamples();
-  navigator.vibrate?.(0);
+  haptic(0);
   bursts=[];showStart=null;nextCue=0;ambientAt=Infinity;ambientIndex=0;showRunning=false;lastUserBurst=-Infinity;
   finaleStatus.textContent=status;
   refreshFinale();
@@ -243,10 +249,6 @@ function playBursts(t){
     if(!sample('boom',.42*level,pitch))tone(63+burst.palette*7,.087*level,.35,0,'triangle');
     if(burst.scale>=1||burst.style===2||burst.style===4)sample('crackle',.18*level,pitch+.18,.15);
     if(burst.depth==='near')sample('boom',.075*level,pitch*.83,.26);
-    if(burst.major&&!reduced.matches&&/Android/i.test(navigator.userAgent)&&t-lastVibration>=.65){
-      lastVibration=t;
-      navigator.vibrate?.([44,34,58]);
-    }
   }
 }
 function advanceShow(t){
@@ -320,7 +322,7 @@ $('cinema-exit').onclick=()=>{
 };
 $('cinema-pause').onclick=()=>{
   paused=!paused;
-  if(paused){holdClock();releaseScreen();stopSamples();navigator.vibrate?.(0);}
+  if(paused){holdClock();releaseScreen();stopSamples();haptic(0);}
   else if(!document.hidden){releaseClock();enableSound();keepScreenAwake();}
   $('cinema-pause').textContent=paused?'Resume':'Pause';
   updateVolume();
@@ -355,7 +357,7 @@ function advanceJourney(now,tap=false){
     }
   });
   for(const release of journey.lanterns){
-    if(previousTime<release.time&&t>=release.time)softAir(.025,.67,560);
+    if(!release.background&&previousTime<release.time&&t>=release.time)softAir(.025,.67,560);
   }
   if(scene===4)advanceShow(t);
   const grand=journey.closing+journey.writingDuration;
@@ -376,17 +378,16 @@ function interactJourney(point){
   const now=time();
   const justActivated=advanceJourney(now);
   const {act,t,waiting}=storyFrame;
-  if(!point){if(waiting)advanceJourney(now,true);else if(act===4&&!justActivated.includes(4))userFirework(null,t);return;}
-  const [x,y]=point;
-  if(!reduced.matches)trail(x,y,9);
+  const [x,y]=point??[0,0];
+  if(point&&!reduced.matches)trail(x,y,9);
   const [scale,cx,cy]=journeyCamera(t,reduced.matches);
   const wx=cx+(x-WIDTH/2)/scale, wy=cy+(y-HEIGHT/2)/scale;
   if(act===1){
-    const lamp=hitDiya(wx,wy);
+    const lamp=point?hitDiya(wx,wy):lamps.findIndex((_,i)=>litAt[i]===undefined||litAt[i]>t);
     if(lamp<0)return;
     if(waiting)advanceJourney(now,true);
     if(litAt[lamp]===undefined||litAt[lamp]>t){
-      litAt[lamp]=t;announcedLamps.add(lamp);diyaSound();
+      litAt[lamp]=t;announcedLamps.add(lamp);diyaSound();haptic(12);
     }
     return;
   }
@@ -397,8 +398,11 @@ function interactJourney(point){
     Math.hypot(wx-355,wy-740)<95,
     wy<675,
   ];
-  if(waiting&&targets[act]){advanceJourney(now,true);return;}
-  if(!waiting&&act===4&&targets[4]&&!justActivated.includes(4))userFirework(point,t);
+  if(waiting&&(!point||targets[act])){
+    if(advanceJourney(now,true).includes(act))haptic(activationHaptics[act]);
+    return;
+  }
+  if(!waiting&&act===4&&(!point||targets[4])&&!justActivated.includes(4))userFirework(point,t);
 }
 function stagePoint(e){
   const r=canvas.getBoundingClientRect();

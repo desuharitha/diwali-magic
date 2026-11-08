@@ -201,14 +201,41 @@ function rangoli(c,t,brightness) {
   ellipse(c,0,0,15,15,'#ffca78');ellipse(c,0,0,8,8,'#f17785');
   c.restore();
 }
-function lantern(c,x,y,s,t) {
+const lanternColors=[
+  ['#ff913c70','#c65343','#ffd593','#d66647'],
+  ['#ffc35465','#c88338','#ffe5a3','#e39645'],
+  ['#ff782e6d','#ae4f35','#ffc07a','#d16c3b'],
+];
+function lantern(c,x,y,s,t,tint=0) {
   c.save();c.translate(x,y);c.rotate(Math.sin(t*1.6)*.09);c.scale(s,s);
-  glow(c,0,0,70,'#ff913c70');
+  const [halo,left,center,right]=lanternColors[tint];
+  glow(c,0,0,70,halo);
   const paper=c.createLinearGradient(-18,0,18,0);
-  paper.addColorStop(0,'#c65343');paper.addColorStop(.5,'#ffd593');paper.addColorStop(1,'#d66647');
+  paper.addColorStop(0,left);paper.addColorStop(.5,center);paper.addColorStop(1,right);
   polygon(c,[[-16,-20],[16,-20],[21,-10],[15,20],[-15,20],[-21,-10]],paper);
   line(c,-9,-19,-8,19,'#da7646');line(c,9,-19,8,19,'#da7646');
   ellipse(c,0,20,15,3,'#7d3c3d');ellipse(c,0,21,5,2,'#fff2b7');c.restore();
+}
+let lanternSprites;
+function floatingLantern(c,release,t,reduced){
+  const age=t-release.time;
+  if(age<0||age>=release.life)return;
+  lanternSprites??=lanternColors.map((_,tint)=>{
+    const sprite=document.createElement('canvas');
+    sprite.width=144;sprite.height=144;
+    lantern(sprite.getContext('2d'),72,72,1,0,tint);
+    return sprite;
+  });
+  const fade=smooth(age/.7)*(1-smooth((age-release.life+2)/2));
+  const sway=reduced?0:Math.sin(age*release.sway+release.phase)*release.drift;
+  const rise=age*(reduced?release.speed*.77:release.speed);
+  const size=release.size*(1-.25*age/release.life);
+  c.save();
+  c.globalAlpha=fade*release.alpha;
+  c.translate(release.x+sway,release.y-rise);
+  if(!reduced)c.rotate(sway*.004);
+  c.drawImage(lanternSprites[release.tint],-72*size,-72*size,144*size,144*size);
+  c.restore();
 }
 const fireworkPalettes=[
   ['#ffb74e','#fff2b2'],['#ff535b','#ffe3d5'],['#63f199','#e0ffcf'],
@@ -302,12 +329,25 @@ export function cameraAt(scene,t,reduceMotion){
   return [scale,cx,clamp(cy,HEIGHT/2/scale,HEIGHT-HEIGHT/2/scale)];
 }
 
+const lanternReleases=[[26.5,355],[28.9,208],[30.6,512],[32.9,287],[35.3,557],[38.5,420]];
+function lanternFlight(time,x,i,background=false){
+  const r=offset=>rand(i*17+offset+1200);
+  return {time,x,background,y:background?550+r(1)*150:740,
+    size:background?.32+r(2)*.45:.92+r(2)*.32,
+    speed:background?33+r(3)*26:53+r(3)*19, life:10.5+r(4)*1.8,
+    sway:.55+r(5)*1.13,phase:r(6)*Math.PI*2,drift:7+r(7)*16,
+    alpha:background?.59+r(8)*.28:1,tint:i%3};
+}
+const leadLanterns=lanternReleases.map(([time,x],i)=>lanternFlight(time,x,i));
+const distantLanterns=lanternReleases.flatMap(([time],i)=>[0,1].map(j=>{
+  const seed=12+i*2+j;
+  return lanternFlight(time+.16+rand(seed+92)*1.15,65+rand(seed+55)*590,seed,true);
+}));
 // Recipient cues use one clock across the five acts and the ambient closing.
 export const journey = {
   acts,
   lamps:lampTimes,
-  lanterns:[{time:26.5,x:355},{time:28.9,x:208},{time:30.6,x:512},
-    {time:32.9,x:287},{time:35.3,x:557},{time:38.5,x:420}],
+  lanterns:[...leadLanterns,...distantLanterns],
   closing:51,
   writingDuration:WRITING_DURATION,
 };
@@ -369,11 +409,13 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
     lantern(c,journey.lanterns[0].x,740,1.12,reduceMotion?0:sparkTime);
     c.restore();
   }
-  lanterns.forEach(l=>{
+  if(cinematic){
+    for(const release of distantLanterns)floatingLantern(c,release,t,reduceMotion);
+    for(const release of leadLanterns)floatingLantern(c,release,t,reduceMotion);
+  }else lanterns.forEach(l=>{
     const age=t-l.time;
     if(age>=0&&age<9){
       c.save();
-      if(cinematic)c.globalAlpha=smooth(age/.55)*(1-smooth((age-7.6)/1.4));
       lantern(c,l.x+(reduceMotion?0:Math.sin(age)*18),740-age*(reduceMotion?65:82),1.12-age*.068,t);
       c.restore();
     }
