@@ -22,6 +22,14 @@ await withBrowser(chrome,url.href,async({send,evaluate})=>{
   assert.equal(opening.creator,'none');
   assert.ok(Math.abs(opening.ratio-9/16)<.003,JSON.stringify(opening));
   await evaluate(`(()=>{
+    window.screenRequests=0;window.screenReleases=0;
+    Object.defineProperty(navigator,'wakeLock',{value:{request:async type=>{
+      if(type!=='screen')throw new Error('Unexpected wake lock');
+      window.screenRequests++;
+      const lock=new EventTarget();
+      lock.release=async()=>{window.screenReleases++;lock.dispatchEvent(new Event('release'));};
+      return lock;
+    }}});
     const proto=CanvasRenderingContext2D.prototype;
     const clear=proto.clearRect, text=proto.fillText, ellipse=proto.ellipse;
     window.recipientProbe={texts:[],lamps:0,lanterns:0,rockets:0};
@@ -122,6 +130,7 @@ await withBrowser(chrome,url.href,async({send,evaluate})=>{
     })()`);
     await writeFile(join(folder,'audio.wav'),Buffer.from(audio,'base64'));
   }
+  assert.deepEqual(await evaluate('[window.screenRequests,window.screenReleases]'),[1,1]);
   const click=id=>evaluate('document.getElementById('+JSON.stringify(id)+').click()');
   await click('cinema-pause');
   assert.equal(await evaluate("document.querySelector('#cinema-pause').textContent"),'Resume');
@@ -137,8 +146,14 @@ await withBrowser(chrome,url.href,async({send,evaluate})=>{
   await click('cinema-replay');
   await sleep(150);
   assert.equal(await evaluate('window.recipientProbe.lamps'),0);
+  await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+  const [left,top,width,height]=opening.position;
+  await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:left+width/2,y:top+height*887/1280}]});
+  await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await sleep(160);
+  assert.equal(await evaluate('window.recipientProbe.lamps'),1,'A tap should light a diya ahead of its cue.');
   await click('cinema-exit');
   assert.equal(await evaluate("document.querySelector('#invitation').hidden"),false);
-  console.log('Verified one tap, five continuous acts, automatic and ambient fireworks, closing names, stable portrait layout, active audio, pause, replay and exit.');
+  console.log('Verified one tap, five continuous acts, automatic and ambient fireworks, closing names, stable portrait layout, active audio, pause, replay, early diya lighting, screen lock lifecycle and exit.');
 });
 

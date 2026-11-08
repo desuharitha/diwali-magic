@@ -211,33 +211,53 @@ function updateVolume(){
   if(volume)volume.gain.setTargetAtTime(muted||(viewer&&(!playing||paused||document.hidden))?0:.72,
     audio.currentTime,.025);
 }
+let screenLock=null, requestingScreen=false;
+function needsScreen(){
+  return playing&&!paused&&!document.hidden&&time()<journey.closing+2.4;
+}
+async function keepScreenAwake(){
+  if(!navigator.wakeLock||requestingScreen||screenLock||!needsScreen())return;
+  requestingScreen=true;
+  try{
+    const lock=await navigator.wakeLock.request('screen');
+    if(!needsScreen()){await lock.release();return;}
+    screenLock=lock;
+    lock.addEventListener('release',()=>{if(screenLock===lock)screenLock=null;},{once:true});
+  }catch{/* Playback works when the device declines the screen lock. */}
+  finally{requestingScreen=false;}
+}
+function releaseScreen(){
+  const lock=screenLock;
+  screenLock=null;
+  if(lock)lock.release().catch(()=>{});
+}
 function beginJourney(){
   heldAt=null;
   go(0,true);
   previousTime=-1;playing=true;paused=false;
   invitation.hidden=true;cinemaControls.hidden=false;
   $('cinema-pause').textContent='Pause';
-  enableSound();updateVolume();
+  enableSound();updateVolume();keepScreenAwake();
 }
 $('begin').onclick=beginJourney;
 $('cinema-replay').onclick=beginJourney;
 $('cinema-exit').onclick=()=>{
-  playing=false;paused=false;heldAt=null;
+  playing=false;paused=false;heldAt=null;releaseScreen();
   go(0,true);updateVolume();
   invitation.hidden=false;cinemaControls.hidden=true;
   $('begin').focus({preventScroll:true});
 };
 $('cinema-pause').onclick=()=>{
   paused=!paused;
-  if(paused){holdClock();navigator.vibrate?.(0);}
-  else if(!document.hidden){releaseClock();enableSound();}
+  if(paused){holdClock();releaseScreen();navigator.vibrate?.(0);}
+  else if(!document.hidden){releaseClock();enableSound();keepScreenAwake();}
   $('cinema-pause').textContent=paused?'Resume':'Pause';
   updateVolume();
 };
 document.addEventListener('visibilitychange',()=>{
   if(!viewer||!playing)return;
-  if(document.hidden)holdClock();
-  else if(!paused)releaseClock();
+  if(document.hidden){holdClock();releaseScreen();}
+  else if(!paused){releaseClock();keepScreenAwake();}
   updateVolume();
 });
 function advanceJourney(t){
@@ -251,6 +271,7 @@ function advanceJourney(t){
   }
   if(previousTime<journey.fireworks&&t>=journey.fireworks)startShow(journey.fireworks);
   if(scene===4)advanceShow(t);
+  if(t>=journey.closing+2.4&&previousTime<journey.closing+2.4)releaseScreen();
   previousTime=t;
 }
 function interactJourney(point){
