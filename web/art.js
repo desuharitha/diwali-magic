@@ -1,4 +1,5 @@
 import {acts} from './journey.js';
+import {goldenWriting, WRITING_DURATION} from './lettering.js';
 
 export const WIDTH = 720, HEIGHT = 1280, FPS = 30, DURATION = 47;
 export const SCENES = [
@@ -23,6 +24,14 @@ const exportBursts = [
 ];
 export const colors = ['#ffce83','#ff879f','#92efe0','#cbaaff','#ff9f69'];
 export const lamps = [[124,931],[231,901],[360,887],[489,901],[596,931]];
+export function hitDiya(x,y){
+  let result=-1, distance=1;
+  lamps.forEach(([lx,ly],i)=>{
+    const score=((x-lx)/45)**2+((y-ly-2)/36)**2;
+    if(score<distance){result=i;distance=score;}
+  });
+  return result;
+}
 export const clamp = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi,x));
 export const smooth = x => { x = clamp(x); return x*x*(3-2*x); };
 export const rand = n => {
@@ -200,44 +209,74 @@ function lantern(c,x,y,s,t) {
   line(c,-9,-19,-8,19,'#da7646');line(c,9,-19,8,19,'#da7646');
   ellipse(c,0,20,15,3,'#7d3c3d');ellipse(c,0,21,5,2,'#fff2b7');c.restore();
 }
-const fireworkPalettes = [
-  ['#ffb459','#ffe6a0'], ['#f378ad','#ffc6d9'], ['#62ded3','#ecfff8'],
-  ['#8aafff','#ecf6ff'], ['#ff746f','#ffe0a6'],
+const fireworkPalettes=[
+  ['#ffb74e','#fff2b2'],['#ff535b','#ffe3d5'],['#63f199','#e0ffcf'],
+  ['#6aaaff','#dbedff'],['#bc82ff','#f7d9ff'],['#b7d9ff','#ffffff'],
 ];
-function firework(c,b,t,low) {
+const styleFor=b=>b.style??(b.seed%5);
+function firework(c,b,t,low){
   const dt=t-b.time;
   if(dt<0||dt>=FIREWORK_LIFE)return;
-  const far=b.depth==='far', [trailColor,tipColor]=fireworkPalettes[b.palette];
+  const far=b.depth==='far', style=styleFor(b);
+  const [color,tip]=fireworkPalettes[b.palette];
   c.save();
   if(dt<FLIGHT){
-    const progress=dt/FLIGHT, y=b.y+(far?780-b.y:940-b.y)*(1-progress)**1.45;
-    const x=b.x+Math.sin(progress*Math.PI)*12;
-    c.globalAlpha=far?.61:1;
-    line(c,x,y,x-3,y+23,trailColor,far?1:2);
-    ellipse(c,x,y,2,2,tipColor);
-    c.restore();
-    return;
+    const u=dt/FLIGHT, origin=far?720:925, y=b.y+(origin-b.y)*(1-u)**1.4;
+    const x=b.x+Math.sin(u*Math.PI)*15;
+    const trail=c.createLinearGradient(x,y,x,y+105);
+    trail.addColorStop(0,tip);trail.addColorStop(.32,color);trail.addColorStop(1,'transparent');
+    line(c,x,y,x-7,y+105,trail,far?2:3.5);
+    if(!low)glow(c,x,y,17,color+'70');
+    ellipse(c,x,y,2,2,tip);c.restore();return;
   }
-  const age=dt-FLIGHT, fade=clamp(1-age/(FIREWORK_LIFE-FLIGHT));
-  const count=far?(low?13:27):(low?23:48);
-  const spread=1-Math.exp(-age*2.6), drop=age*age*(far?16:24);
-  c.globalAlpha=fade*(far?.65:.94);
-  if(!low&&age<.42)glow(c,b.x,b.y,30+age*85,trailColor+'64');
-  c.strokeStyle=trailColor;c.lineWidth=far?1:1.7;c.fillStyle=tipColor;
-  const tips=[];
-  c.beginPath();
-  for(let i=0;i<count;i++){
-    const angle=i/count*Math.PI*2+b.seed, dx=Math.cos(angle),dy=Math.sin(angle);
-    const jitter=rand(b.seed*91+i);
-    const ring=i%3===0?.58:1;
-    const radius=(77+jitter*53)*ring*b.scale*spread;
-    const x=b.x+dx*radius,y=b.y+dy*radius+drop;
-    const tail=(far?9:16)*fade*b.scale;
-    c.moveTo(x-dx*tail,y-dy*tail-age*6);c.lineTo(x,y);
-    if(i%2===0||!low)tips.push(x,y);
+  const age=dt-FLIGHT, progress=age/(FIREWORK_LIFE-FLIGHT);
+  const fade=1-progress, spread=1-Math.exp(-age*3.0);
+  const radius=(far?148:226)*b.scale;
+  const count=far?(low?30:62):(low?59:132);
+  const willow=style===2, stars=style===3, crackle=style===4;
+  if(!low&&age<.55){
+    c.globalAlpha=fade*.55;
+    glow(c,b.x,b.y,45+age*155,color+'79');
   }
-  c.stroke();
-  for(let i=0;i<tips.length;i+=2)c.fillRect(tips[i],tips[i+1],far?1.6:2.3,far?1.6:2.3);
+  c.globalAlpha=fade*(far?.82:1);
+  c.lineWidth=far?1:1.7;
+  for(let ring=0;ring<(low?2:3);ring++){
+    const [trailColor,core]=style===1?fireworkPalettes[(b.palette+ring*2)%fireworkPalettes.length]:[color,tip];
+    c.strokeStyle=trailColor;c.fillStyle=core;c.beginPath();
+    const every=low?2:3, tips=[];
+    for(let i=ring;i<count;i+=every){
+      const angle=i*2.399963+b.seed, dx=Math.cos(angle), dy=Math.sin(angle);
+      const random=rand(b.seed*97+i), shell=ring===1?.70:ring===2?.88:1;
+      const shape=stars?.72+.28*Math.cos(angle*5)**2:.72+random*.28;
+      const r=radius*spread*shape*shell;
+      const drop=age*age*(willow?45:far?12:22);
+      const x=b.x+dx*r,y=b.y+dy*r+drop;
+      const tail=(willow?42:style===0?26:15)*fade*(.7+random*.5);
+      c.moveTo(x-dx*tail,y-dy*tail-age*(willow?28:9));c.lineTo(x,y);
+      if(!low||i%2===0)tips.push(x,y);
+      if(crackle&&i%5===0&&progress>.26){
+        const off=2+9*Math.sin(progress*Math.PI)*random;
+        c.moveTo(x-off,y+off*.6);c.lineTo(x+off,y-off*.6);
+        c.moveTo(x+off,y+off);c.lineTo(x-off,y-off);
+      }
+    }
+    c.stroke();
+    for(let i=0;i<tips.length;i+=2)c.fillRect(tips[i],tips[i+1],far?1.5:2.2,far?1.5:2.2);
+  }
+  c.restore();
+}
+function fireworkLighting(c,bursts,t,reduced){
+  c.save();c.globalCompositeOperation='screen';
+  const maxLight=reduced?.07:.24;
+  let remaining=maxLight;
+  for(const b of bursts){
+    const age=t-b.time-FLIGHT;
+    if(age<0||age>1.2||remaining<=0)continue;
+    const strength=Math.min(remaining,Math.min(1,age/.12)*Math.exp(-age*3.5)*(b.depth==='far'?.05:.17)*b.scale);
+    remaining-=strength;
+    c.globalAlpha=strength;
+    glow(c,b.x,Math.max(440,b.y+235),865,fireworkPalettes[b.palette][0]);
+  }
   c.restore();
 }
 function centered(c, text, y, size, color, max=WIDTH-100) {
@@ -269,6 +308,7 @@ export const journey = {
   lanterns:[{time:26.5,x:355},{time:28.9,x:208},{time:30.6,x:512},
     {time:32.9,x:287},{time:35.3,x:557},{time:38.5,x:420}],
   closing:51,
+  writingDuration:WRITING_DURATION,
 };
 const cameraKeys=[[0,1,640],[8,1.045,666],[15,1.073,682],[23,1.055,672],
   [33,1.03,632],[39,1,640]];
@@ -304,7 +344,7 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
   rangoli(c,reduceMotion?0:t,rangoliLight);
   if(cinematic){
     lamps.forEach(([x,y],i)=>{
-      const ignition=litAt[i]??journey.lamps[i];
+      const ignition=litAt[i]??Infinity;
       const size=.70+(.15+(i===2?.26:0))*smooth((t-5)/5)*(1-smooth((t-16)/5));
       diya(c,x,y,size,t>=ignition,t+i,.18+.82*smooth((t-ignition)/.7));
     });
@@ -340,6 +380,7 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
   c.translate(reduceMotion?0:Math.sin(t*.24)*4,0);
   c.drawImage(foliageLayer,0,0);
   c.restore();
+  if(bursts.length)fireworkLighting(c,bursts,t,reduceMotion);
   if(!cinematic&&scene===0)message(c,'Diwali Magic','A festival of light and little wonders',179,smooth(t/.9),58);
   if(!cinematic&&scene===1&&lit.length===0)message(c,'Light the diyas','One small flame can light up a courtyard',178,smooth(t/.6),52);
   if(!cinematic&&scene===2&&revealed)message(c,'Happy Diwali, '+names.to+'!','May every little spark bring a new reason to smile.',170,1,59);
@@ -349,8 +390,12 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
   if(cinematic){
     const wish=smooth((t-19)/2.2)*(1-smooth((t-25)/2.4));
     if(wish>0)message(c,'Happy Diwali, '+names.to+'!','May every little spark bring a new reason to smile.',178,wish,55);
-    const closing=smooth((t-journey.closing)/2.4);
-    if(closing>0)message(c,'Happy Diwali, '+names.to+'!','With love, '+names.from,1152,closing,52);
+    const closing=t-journey.closing;
+    if(closing>0){
+      const namesAlpha=smooth((closing-1.5)/1.8);
+      message(c,'To '+names.to,'With love, '+names.from,389,namesAlpha,37);
+      goldenWriting(c,closing,low,reduceMotion);
+    }
   }
   for(const s of sparks){
     const a=sparkTime-s.time;

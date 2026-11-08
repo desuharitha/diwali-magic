@@ -51,3 +51,12 @@ node smoke.mjs "<browser executable>" http://127.0.0.1:8765
 Publish the contents of `web/` together on a static HTTPS host. All site assets use relative paths, so the greeting also works under a repository subpath. Use a standalone host or a custom domain you control for links that omit the GitHub username and repository. The source archive includes the local tools separately from the web files.
 
 The site uses no database, paid API, or per-greeting AI inference. The interactive rendering runs on the visitor’s device. Hosting and bandwidth depend on the selected provider. Video encoding runs locally.
+
+## Recorded fireworks audio
+
+The web greeting bundles short, mono, level-adjusted WAV excerpts:
+
+- Launch and boom: Rudmer_Rotteveel, [Whistle and Explosion Single_Firework](https://freesound.org/people/Rudmer_Rotteveel/sounds/336008/), CC0.
+- Crackle: soundmary, [fireworks exploding 1](https://freesound.org/people/soundmary/sounds/117616/), CC0. The excerpt is sourced from the [ESC-50 clip](https://github.com/karolpiczak/ESC-50/blob/master/audio/2-117616-A-48.wav).
+
+The creator's local MP4 exporter keeps its existing synthesized soundtrack. The live recipient greeting uses the recorded fireworks and hand-traced closing lettering.

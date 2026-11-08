@@ -1,4 +1,4 @@
-import {WIDTH, HEIGHT, FPS, DURATION, SCENES, draw, timeline, lamps, rand, clamp, showCues, SHOW_LENGTH, FLIGHT, FIREWORK_LIFE, cameraAt, journey, journeyCamera} from './art.js';
+import {WIDTH, HEIGHT, FPS, DURATION, SCENES, draw, timeline, lamps, rand, clamp, showCues, SHOW_LENGTH, FLIGHT, FIREWORK_LIFE, cameraAt, journey, journeyCamera, hitDiya} from './art.js';
 import {createJourney, greetingFragment, parseGreeting} from './journey.js';
 
 const $=id=>document.getElementById(id);
@@ -22,10 +22,11 @@ if(viewer){
 document.documentElement.classList.add('ready');
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 let scene=0,start=performance.now(),lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],seed=0;
-let audio, volume, music, muted=false, lastTrail=0, lastChime=0, lastFrame=0;
+let audio, volume, music, fireworkBus, muted=false, lastTrail=0, lastChime=0, lastFrame=0;
 let low=matchMedia('(pointer: coarse)').matches, frames=0, slowFrames=0;
 let playing=false, paused=false, heldAt=null, previousTime=-1;
 let story=createJourney(), storyFrame=story.update(0);
+let diyaFallback=false, announcedLamps=new Set(), closingVolley=false;
 const actHints=['Tap the house','Tap the diyas','Tap the rangoli','Tap the lantern','Tap the sky'];
 const cueHint=$('scene-cue');
 const invitation=$('invitation'), cinemaControls=$('cinema-controls');
@@ -49,12 +50,61 @@ function tone(hz,level,duration,offset=0,type='sine') {
   gain.gain.exponentialRampToValueAtTime(.0001,at+duration);
   osc.connect(gain).connect(volume);osc.start(at);osc.stop(at+duration+.015);
 }
+const soundBuffers={};
+const sampleVoices=new Set();
+let loadingSounds=false, airNoise;
+function stopSamples(){
+  for(const source of sampleVoices)source.stop();
+  sampleVoices.clear();
+}
+function loadSounds(){
+  if(loadingSounds)return;
+  loadingSounds=true;
+  for(const name of ['launch','boom','crackle']){
+    fetch(new URL('./firework-'+name+'.wav',import.meta.url))
+      .then(response=>{if(!response.ok)throw Error();return response.arrayBuffer();})
+      .then(bytes=>audio.decodeAudioData(bytes))
+      .then(buffer=>{soundBuffers[name]=buffer;}).catch(()=>{});
+  }
+}
+function sample(name,level,pitch=1,delay=0){
+  if(!audio||muted||document.hidden||paused||sampleVoices.size>=16||!soundBuffers[name])return false;
+  const source=audio.createBufferSource(), gain=audio.createGain();
+  source.buffer=soundBuffers[name];source.playbackRate.value=pitch;
+  gain.gain.value=level;
+  source.connect(gain).connect(fireworkBus);
+  sampleVoices.add(source);
+  source.onended=()=>{sampleVoices.delete(source);source.disconnect();gain.disconnect();};
+  source.start(audio.currentTime+delay);
+  return true;
+}
+function softAir(level,duration,frequency){
+  if(!audio||muted||document.hidden||paused)return;
+  if(!airNoise){
+    airNoise=audio.createBuffer(1,audio.sampleRate,audio.sampleRate);
+    const data=airNoise.getChannelData(0);
+    for(let i=0;i<data.length;i++)data[i]=2*rand(i+812)-1;
+  }
+  const at=audio.currentTime, source=audio.createBufferSource(), filter=audio.createBiquadFilter(), gain=audio.createGain();
+  source.buffer=airNoise;filter.type='bandpass';filter.frequency.value=frequency;filter.Q.value=.65;
+  gain.gain.setValueAtTime(.0001,at);
+  gain.gain.exponentialRampToValueAtTime(level,at+duration*.22);
+  gain.gain.exponentialRampToValueAtTime(.0001,at+duration);
+  source.connect(filter).connect(gain).connect(volume);
+  source.start(at);source.stop(at+duration);
+}
+function diyaSound(){softAir(.035,.26,440);tone(704,.032,.42,.07);chime(.018);}
 function enableSound(){
   if(muted)return;
   const Audio=window.AudioContext||window.webkitAudioContext;
   if(!Audio)return;
   try{
-    if(!audio){audio=new Audio();volume=audio.createGain();volume.gain.value=.72;volume.connect(audio.destination);}
+    if(!audio){
+      audio=new Audio();volume=audio.createGain();volume.gain.value=.72;volume.connect(audio.destination);
+      fireworkBus=audio.createDynamicsCompressor();
+      fireworkBus.threshold.value=-18;fireworkBus.ratio.value=4;fireworkBus.connect(volume);
+      loadSounds();
+    }
     audio.resume().catch(()=>{});
     if(!music){
       let beat=0;
@@ -77,7 +127,7 @@ $('sound').onclick=()=>{
   muted=!muted;$('sound').textContent=muted?'Sound off':'Sound on';
   $('sound').setAttribute('aria-pressed',String(!muted));
   updateVolume();
-  if(!muted)enableSound();
+  if(muted)stopSamples();else enableSound();
 };
 const stepButtons=SCENES.map(([label],i)=>{
   const button=document.createElement('button');
@@ -120,12 +170,11 @@ function interact(point){
   if(scene===0){if(!point)go(1);chime();return;}
   if(scene===1){
     if(lit.length===5){if(!point)go(2);return;}
-    const remaining=lamps.map((_,i)=>i).filter(i=>!lit.includes(i));
     const [scale,cx,cy]=cameraAt(scene,t,reduced.matches);
-    const distance=i=>Math.hypot(lamps[i][0]-cx-(x-WIDTH/2)/scale,
-      lamps[i][1]-cy-(y-HEIGHT/2)/scale);
-    const lamp=point?remaining.reduce((a,b)=>distance(a)<distance(b)?a:b):remaining[0];
-    lit.push(lamp);litAt[lamp]=t;chime(.047);refresh();return;
+    const lamp=point?hitDiya(cx+(x-WIDTH/2)/scale,cy+(y-HEIGHT/2)/scale)
+      :lamps.findIndex((_,i)=>!lit.includes(i));
+    if(lamp<0||lit.includes(lamp))return;
+    lit.push(lamp);litAt[lamp]=t;diyaSound();refresh();return;
   }
   if(scene===2){
     if(revealed){if(!point)go(3);return;}
@@ -146,7 +195,7 @@ function userFirework(point,t){
   if(active.length>=(low?3:5))bursts.splice(bursts.indexOf(active[0]),1);
   launchFirework({x:point?.[0]??125+rand(k)*(WIDTH-250),
     y:point?.[1]??210+rand(k+9)*240,time:t,seed:k,
-    depth:'near',palette:k%5,scale:1.22,major:true},t);
+    depth:'near',palette:k%5,scale:1.22,major:true});
 }
 function refreshFinale(){
   if(scene!==4)return;
@@ -154,6 +203,7 @@ function refreshFinale(){
   $('stop-show').disabled=!showRunning&&!bursts.length;
 }
 function resetFireworks(status){
+  stopSamples();
   navigator.vibrate?.(0);
   bursts=[];showStart=null;nextCue=0;ambientAt=Infinity;ambientIndex=0;showRunning=false;lastUserBurst=-Infinity;
   finaleStatus.textContent=status;
@@ -165,22 +215,29 @@ function startShow(t){
   refreshFinale();
 }
 function fireworkLevel(burst){
-  return burst.major?1:burst.depth==='far'?.34:.56;
+  return burst.major?1:burst.depth==='far'?.33:Math.min(.86,.46*burst.scale);
 }
-function launchFirework(burst,now){
+function launchFirework(burst){
   bursts.push(burst);
-  if(now<burst.time+FLIGHT)tone(620+burst.palette*45,.03*fireworkLevel(burst),.24);
   refreshFinale();
 }
 function playBursts(t){
   for(const burst of bursts){
-    const age=t-burst.time-FLIGHT;
+    const flight=t-burst.time;
+    if(flight<0)continue;
+    const level=fireworkLevel(burst);
+    if(!burst.launched){
+      burst.launched=true;
+      if(flight<FLIGHT&&!sample('launch',.19*level,1.34+(burst.seed%4)*.09))softAir(.028*level,.3,670);
+    }
+    const age=flight-FLIGHT;
     if(burst.sounded||age<0)continue;
     burst.sounded=true;
     if(age>.18)continue;
-    const level=fireworkLevel(burst);
-    tone(63+burst.palette*7,.087*level,.35,0,'triangle');
-    chime(.042*level);
+    const pitch=burst.depth==='far'?1.08:.8+(burst.seed%4)*.07;
+    if(!sample('boom',.42*level,pitch))tone(63+burst.palette*7,.087*level,.35,0,'triangle');
+    if(burst.scale>=1||burst.style===2||burst.style===4)sample('crackle',.18*level,pitch+.18,.15);
+    if(burst.depth==='near')sample('boom',.075*level,pitch*.83,.26);
     if(burst.major&&!reduced.matches&&/Android/i.test(navigator.userAgent)&&t-lastVibration>=.65){
       lastVibration=t;
       navigator.vibrate?.([44,34,58]);
@@ -195,13 +252,13 @@ function advanceShow(t){
   while(nextCue<showCues.length&&t>=showStart+showCues[nextCue].time){
     const cue=showCues[nextCue++];
     const cueTime=showStart+cue.time;
-    if(t-cueTime<FIREWORK_LIFE)launchFirework({...cue,time:cueTime},t);
+    if(t-cueTime<FIREWORK_LIFE)launchFirework({...cue,time:cueTime});
   }
   if(t>=ambientAt){
     const n=ambientIndex++;
     if(n===0)finaleStatus.textContent='Fireworks still sparkling. Replay or stop whenever you like.';
     launchFirework({time:t,x:105+rand(n+90)*(WIDTH-210),y:190+rand(n+210)*285,
-      seed:n+175,depth:'far',palette:n%5,scale:.65+rand(n+40)*.28},t);
+      seed:n+175,depth:'far',palette:n%5,scale:.65+rand(n+40)*.28});
     ambientAt=t+2.8+rand(n+320)*2.5;
   }
 }
@@ -217,7 +274,7 @@ function updateVolume(){
 }
 let screenLock=null, requestingScreen=false;
 function needsScreen(){
-  return playing&&!paused&&!document.hidden&&storyFrame.t<journey.closing+2.4;
+  return playing&&!paused&&!document.hidden&&storyFrame.t<journey.closing+journey.writingDuration+2;
 }
 async function keepScreenAwake(){
   if(!navigator.wakeLock||requestingScreen||screenLock||!needsScreen())return;
@@ -240,6 +297,7 @@ function beginJourney(){
   go(0,true);
   previousTime=-1;playing=true;paused=false;
   story=createJourney();storyFrame=story.update(0);
+  diyaFallback=false;announcedLamps.clear();closingVolley=false;
   invitation.hidden=true;cinemaControls.hidden=false;
   $('cinema-pause').textContent='Pause';
   canvas.tabIndex=0;
@@ -257,14 +315,14 @@ $('cinema-exit').onclick=()=>{
 };
 $('cinema-pause').onclick=()=>{
   paused=!paused;
-  if(paused){holdClock();releaseScreen();navigator.vibrate?.(0);}
+  if(paused){holdClock();releaseScreen();stopSamples();navigator.vibrate?.(0);}
   else if(!document.hidden){releaseClock();enableSound();keepScreenAwake();}
   $('cinema-pause').textContent=paused?'Resume':'Pause';
   updateVolume();
 };
 document.addEventListener('visibilitychange',()=>{
   if(!viewer||!playing)return;
-  if(document.hidden){holdClock();releaseScreen();}
+  if(document.hidden){holdClock();releaseScreen();stopSamples();}
   else if(!paused){releaseClock();keepScreenAwake();}
   updateVolume();
 });
@@ -275,17 +333,36 @@ function advanceJourney(now,tap=false){
   if(waiting&&cueHint.textContent!==actHints[act])cueHint.textContent=actHints[act];
   cueHint.hidden=!waiting;
   for(const cue of events){
-    if(cue===0||cue===2)chime(.04);
+    if(cue===0){chime(.04);tone(660,.022,.65,.17);}
+    if(cue===2)for(let i=0;i<5;i++)tone(840+i*175,.026,.55,i*.115);
     if(cue===4)startShow(journey.acts[4]);
   }
-  journey.lamps.forEach((mark,i)=>{
-    if(litAt[i]===undefined&&t>=mark){litAt[i]=mark;chime(.027);}
+  if(act>=1&&!diyaFallback&&((act===1&&now>=storyFrame.readyAt+3)||act>1)){
+    diyaFallback=true;
+    let next=t;
+    lamps.forEach((_,i)=>{
+      if(litAt[i]===undefined){litAt[i]=next;next+=.53;}
+    });
+  }
+  litAt.forEach((mark,i)=>{
+    if(t>=mark&&!announcedLamps.has(i)){
+      announcedLamps.add(i);diyaSound();
+    }
   });
   for(const release of journey.lanterns){
-    if(previousTime<release.time&&t>=release.time)tone(523.25,.034,.9);
+    if(previousTime<release.time&&t>=release.time)softAir(.025,.67,560);
   }
   if(scene===4)advanceShow(t);
-  if(t>=journey.closing+2.4&&previousTime<journey.closing+2.4)releaseScreen();
+  const grand=journey.closing+journey.writingDuration;
+  if(t>=grand&&!closingVolley){
+    closingVolley=true;
+    [[130,170,1,1.1],[365,210,0,1.52],[583,149,3,1.16],[510,292,4,1.25],[224,307,5,1.2]]
+      .forEach(([x,y,palette,scale],i)=>{
+        const launch=grand+i*.17;
+        bursts.push({x,y,palette,scale,time:launch,depth:'near',seed:210+i,style:i});
+      });
+  }
+  if(t>=journey.closing+journey.writingDuration+2&&previousTime<journey.closing+journey.writingDuration+2)releaseScreen();
   previousTime=t;
   return events;
 }
@@ -299,9 +376,18 @@ function interactJourney(point){
   if(!reduced.matches)trail(x,y,9);
   const [scale,cx,cy]=journeyCamera(t,reduced.matches);
   const wx=cx+(x-WIDTH/2)/scale, wy=cy+(y-HEIGHT/2)/scale;
+  if(act===1){
+    const lamp=hitDiya(wx,wy);
+    if(lamp<0)return;
+    if(waiting)advanceJourney(now,true);
+    if(litAt[lamp]===undefined||litAt[lamp]>t){
+      litAt[lamp]=t;announcedLamps.add(lamp);diyaSound();
+    }
+    return;
+  }
   const targets=[
     wx>92&&wx<638&&wy>490&&wy<795,
-    lamps.some(([lx,ly])=>Math.hypot(lx-wx,ly-wy)<68),
+    false,
     Math.hypot((wx-360)*.7,wy-1027)<110,
     Math.hypot(wx-355,wy-740)<95,
     wy<675,

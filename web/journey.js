@@ -8,7 +8,7 @@ export function createJourney(delay=3){
     for(;;){
       if(started===null){
         const deadline=readyAt+delay;
-        if(now<deadline&&!tap)return {act,t:acts[act],waiting:true,events};
+        if(now<deadline&&!tap)return {act,t:acts[act],waiting:true,readyAt,events};
         started=Math.min(now,deadline);
         events.push(act);
         tap=false;
@@ -17,7 +17,7 @@ export function createJourney(delay=3){
       if(elapsed<lengths[act]){
         const span=acts[act+1]-acts[act];
         const t=act===4?acts[act]+elapsed:acts[act]+elapsed*span/lengths[act];
-        return {act,t,waiting:false,events};
+        return {act,t,waiting:false,readyAt,events};
       }
       readyAt=started+lengths[act];
       act++;
