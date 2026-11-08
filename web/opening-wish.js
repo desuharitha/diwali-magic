@@ -1,4 +1,4 @@
-const maxWidth=570, maxHeight=226;
+const maxWidth=608, maxHeight=288;
 const segmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
 let cachedWish, cachedLayout;
 
@@ -9,9 +9,9 @@ function layout(c,wish){
     return segmenter?Array.from(segmenter.segment(text),item=>item.segment):Array.from(text);
   });
   let result;
-  for(let size=37;size>=15;size-=2){
+  for(let size=53;size>=15;size-=2){
     const font='italic '+size+'px "Palatino Linotype", Georgia, "Noto Serif Telugu", "Noto Serif Devanagari", "Nirmala UI", serif';
-    c.font=font;
+    c.font=font;c.textBaseline='middle';
     const lines=[];
     for(const graphemes of source){
       let start=0;
@@ -29,8 +29,15 @@ function layout(c,wish){
         start=end;
       }
     }
-    const step=size*1.48;
-    result={font,step,lines:lines.map(text=>({text,width:Math.min(maxWidth,c.measureText(text).width)}))};
+    let inkAbove=0, inkBelow=0;
+    const measured=lines.map(text=>{
+      const metrics=c.measureText(text);
+      inkAbove=Math.max(inkAbove,metrics.actualBoundingBoxAscent);
+      inkBelow=Math.max(inkBelow,metrics.actualBoundingBoxDescent);
+      return {text,width:Math.min(maxWidth,metrics.width)};
+    });
+    const step=Math.max(size*1.48,2*Math.max(inkAbove,inkBelow)+size*.20);
+    result={font,step,lines:measured};
     if(lines.length*step<=maxHeight)break;
   }
   cachedWish=wish;
@@ -59,7 +66,7 @@ export function drawOpeningWish(c,wish,t,reduced){
       c.beginPath();c.rect(left-12,y-step*.7,(width+24)*reveal,step*1.4);c.clip();
     }
     c.globalAlpha=reduced?Math.min(1,reveal*2):1;
-    c.shadowBlur=11;c.shadowColor='#eeac47';c.fillStyle='#fff2cd';
+    c.shadowBlur=15;c.shadowColor='#ffc56b';c.fillStyle='#fff5dc';
     c.fillText(text,center,y,maxWidth);
     c.restore();
     if(reveal<1&&!reduced){
