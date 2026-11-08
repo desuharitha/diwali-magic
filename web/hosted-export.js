@@ -22,7 +22,7 @@ export async function recordHostedMp4(names,width,duration,progress){
     const canvas=document.createElement('canvas');
     canvas.width=width;canvas.height=width*HEIGHT/WIDTH;
     const context=canvas.getContext('2d',{alpha:false});
-    const render=t=>draw(context,timeline(Math.min(DURATION-.001,offset+t*speed),names));
+    const render=t=>draw(context,timeline(Math.min(DURATION-.001,offset+t*speed),names,clip));
     render(0);
     stream=canvas.captureStream(FPS);
     const destination=audio.createMediaStreamDestination();

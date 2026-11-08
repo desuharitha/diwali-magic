@@ -362,7 +362,7 @@ export function journeyCamera(t,reduced){
   return [z+(nextZ-z)*progress,360,y+(nextY-y)*progress];
 }
 
-export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],openingWish,sparkTime=t,waiting=false,low=false,reduceMotion=false,fade=0,cinematic=false}) {
+export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],openingWish,finaleWish,sparkTime=t,waiting=false,low=false,reduceMotion=false,fade=0,cinematic=false}) {
   c.setTransform(c.canvas.width/WIDTH,0,0,c.canvas.height/HEIGHT,0,0);
   c.clearRect(0,0,WIDTH,HEIGHT);
   c.save();
@@ -423,13 +423,14 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
   c.translate(reduceMotion?0:Math.sin(t*.24)*4,0);
   c.drawImage(foliageLayer,0,0);
   c.restore();
-  if(cinematic&&scene===0&&openingWish)drawOpeningWish(c,openingWish,t,reduceMotion);
+  if(scene===0&&openingWish)drawOpeningWish(c,openingWish,t,reduceMotion);
   if(bursts.length)fireworkLighting(c,bursts,t,reduceMotion);
   if(!cinematic&&scene===0)message(c,'Diwali Magic','A festival of light and little wonders',179,smooth(t/.9),58);
   if(!cinematic&&scene===1&&lit.length===0)message(c,'Light the diyas','One small flame can light up a courtyard',178,smooth(t/.6),52);
   if(!cinematic&&scene===2&&revealed)message(c,'Happy Diwali, '+names.to+'!','May every little spark bring a new reason to smile.',170,1,59);
   if(!cinematic&&scene===3)message(c,'Send a wish into the sky','Let it rise with the lanterns',174,smooth(t/.6),50);
   for(const b of bursts)if(b.depth!=='far')firework(c,b,t,low||reduceMotion);
+  if(scene===4&&finaleWish)drawOpeningWish(c,finaleWish,t,reduceMotion);
   if(!cinematic&&scene===4&&t>2.4)message(c,'Happy Diwali, '+names.to+'!','With love, '+names.from,1152,smooth((t-2.4)/.9),52);
   if(cinematic){
     const wish=smooth((t-19)/2.2)*(1-smooth((t-25)/2.4));
@@ -451,7 +452,7 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
   }
   if(fade)rect(c,0,0,WIDTH,HEIGHT,'rgba(18,11,28,'+fade+')');
 }
-export function timeline(seconds,names) {
+export function timeline(seconds,names,finaleOnly=false) {
   const scene=cuts.findIndex((_,i)=>seconds<cuts[i+1]);
   const index=scene<0?4:scene, t=seconds-cuts[index];
   const sparks=[];
@@ -459,7 +460,7 @@ export function timeline(seconds,names) {
     const time=1+i*.075;
     if(t-time>=0&&t-time<.64)sparks.push({time,x:114+i*6,y:873+Math.sin(i*.08)*61,vx:rand(i)*24-12,vy:-24,size:2+rand(i+8)*2});
   }
-  return {scene:index,t,names,lit:lampTimes.flatMap((time,i)=>seconds>=time?[i]:[]),
+  return {scene:index,t,names,openingWish:names.wish,finaleWish:finaleOnly?names.wish:undefined,lit:lampTimes.flatMap((time,i)=>seconds>=time?[i]:[]),
     litAt:lampTimes.map(time=>time-cuts[1]),revealed:index===2&&t>1.4,lanterns:index===3?[{time:1.3,x:360},{time:3.4,x:528}]:[],
     bursts:index===4?exportBursts.filter(b=>t>=b.time&&t-b.time<FIREWORK_LIFE):[],sparks,fade:Math.max(0,1-t/.32,1-(cuts[index+1]-seconds)/.32)*.92};
 }

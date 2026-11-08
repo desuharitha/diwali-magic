@@ -516,13 +516,13 @@ const filename=({from,to})=>{
   const clean=s=>s.normalize('NFC').replace(/[^\p{L}\p{M}\p{N}_-]+/gu,'_').replace(/^_+|_+$/g,'')||'Name';
   return 'Diwali_'+clean(to)+'_From_'+clean(from)+'.mp4';
 };
-export async function renderVideo(sender,recipient,width,progress=()=>{},duration='47'){
+export async function renderVideo(sender,recipient,width,progress=()=>{},duration='47',filmWish=''){
   if(exporting)throw new Error('An export is already running.');
   if(![720,1080,2160].includes(width))throw new Error('Choose 720, 1080 or 2160 pixels wide.');
   if(!['35','47','60','finale'].includes(duration))throw new Error('Choose a supported film duration.');
   exporting=true;
   try{
-    const personal=cleanNames(sender,recipient);
+    const personal={...cleanNames(sender,recipient),wish:filmWish};
     const ready=await fetch('./api/ready');
     if(!ready.ok||!(ready.headers.get('content-type')||'').includes('application/json'))
       throw new Error('Start the local Python app to export MP4s.');
@@ -535,7 +535,7 @@ export async function renderVideo(sender,recipient,width,progress=()=>{},duratio
     const frameCount=FPS*length, frames=[];
     for(let i=0;i<frameCount;i++){
       const position=clip?34+i/FPS:i*DURATION/frameCount;
-      draw(context,timeline(position,personal));
+      draw(context,timeline(position,personal,clip));
       const jpg=await new Promise((resolve,reject)=>surface.toBlob(
         blob=>blob?resolve(blob):reject(new Error('Could not render a video frame.')),'image/jpeg',width===2160?.83:.89));
       frames.push(jpg);
@@ -559,12 +559,14 @@ function downloadFile(blob,name){
 const hostedExport=!['localhost','127.0.0.1','[::1]'].includes(location.hostname);
 let savedFilmUrl;
 $('download').onclick=async()=>{
+  if(!wish.reportValidity())return;
   $('download').disabled=true;
   try{
     const width=Number($('quality').value), duration=$('duration').value;
+    const filmWish=wish.value.trim()?wish.value:'';
     const progress=message=>$('status').textContent=message;
     if(hostedExport){
-      const personal={...names};
+      const personal={...names,wish:filmWish};
       const blob=await recordHostedMp4(personal,width,duration,progress);
       const name=filename(personal).replace('.mp4',duration==='finale'?'_Finale.mp4':'.mp4');
       if(savedFilmUrl)URL.revokeObjectURL(savedFilmUrl);
@@ -574,7 +576,7 @@ $('download').onclick=async()=>{
       $('status').replaceChildren('Your personalized MP4 is ready. ',link);
       link.click();
     }else{
-      const {blob,filename:name}=await renderVideo(names.from,names.to,width,progress,duration);
+      const {blob,filename:name}=await renderVideo(names.from,names.to,width,progress,duration,filmWish);
       downloadFile(blob,name);progress('Your personalized MP4 is ready.');
     }
   }catch(e){$('status').textContent=e.message;}
