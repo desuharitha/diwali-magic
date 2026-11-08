@@ -1,3 +1,4 @@
+import {recordHostedMp4} from './hosted-export.js';
 import {WIDTH, HEIGHT, FPS, DURATION, SCENES, draw, timeline, lamps, rand, clamp, showCues, SHOW_LENGTH, FLIGHT, FIREWORK_LIFE, cameraAt, journey, journeyCamera, hitDiya} from './art.js';
 import {createJourney, greetingPath, greetingFragment, parseGreeting, wishError} from './journey.js';
 
@@ -555,11 +556,27 @@ function downloadFile(blob,name){
   link.href=url;link.download=name;link.click();
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
+const hostedExport=!['localhost','127.0.0.1','[::1]'].includes(location.hostname);
+let savedFilmUrl;
 $('download').onclick=async()=>{
   $('download').disabled=true;
   try{
-    const {blob,filename:name}=await renderVideo(names.from,names.to,Number($('quality').value),s=>$('status').textContent=s,$('duration').value);
-    downloadFile(blob,name);$('status').textContent='Your personalized MP4 is ready.';
+    const width=Number($('quality').value), duration=$('duration').value;
+    const progress=message=>$('status').textContent=message;
+    if(hostedExport){
+      const personal={...names};
+      const blob=await recordHostedMp4(personal,width,duration,progress);
+      const name=filename(personal).replace('.mp4',duration==='finale'?'_Finale.mp4':'.mp4');
+      if(savedFilmUrl)URL.revokeObjectURL(savedFilmUrl);
+      savedFilmUrl=URL.createObjectURL(blob);
+      const link=document.createElement('a');
+      link.href=savedFilmUrl;link.download=name;link.textContent='Save MP4';
+      $('status').replaceChildren('Your personalized MP4 is ready. ',link);
+      link.click();
+    }else{
+      const {blob,filename:name}=await renderVideo(names.from,names.to,width,progress,duration);
+      downloadFile(blob,name);progress('Your personalized MP4 is ready.');
+    }
   }catch(e){$('status').textContent=e.message;}
   finally{$('download').disabled=false;}
 };
