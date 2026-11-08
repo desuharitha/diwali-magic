@@ -1,4 +1,5 @@
 import {acts} from './journey.js';
+import {drawOpeningWish} from './opening-wish.js';
 import {goldenWriting, WRITING_DURATION} from './lettering.js';
 
 export const WIDTH = 720, HEIGHT = 1280, FPS = 30, DURATION = 47;
@@ -321,7 +322,7 @@ export function journeyCamera(t,reduced){
   return [z+(nextZ-z)*progress,360,y+(nextY-y)*progress];
 }
 
-export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],sparkTime=t,waiting=false,low=false,reduceMotion=false,fade=0,cinematic=false}) {
+export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[],bursts=[],sparks=[],openingWish,sparkTime=t,waiting=false,low=false,reduceMotion=false,fade=0,cinematic=false}) {
   c.setTransform(c.canvas.width/WIDTH,0,0,c.canvas.height/HEIGHT,0,0);
   c.clearRect(0,0,WIDTH,HEIGHT);
   c.save();
@@ -380,6 +381,7 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
   c.translate(reduceMotion?0:Math.sin(t*.24)*4,0);
   c.drawImage(foliageLayer,0,0);
   c.restore();
+  if(cinematic&&scene===0&&openingWish)drawOpeningWish(c,openingWish,t,reduceMotion);
   if(bursts.length)fireworkLighting(c,bursts,t,reduceMotion);
   if(!cinematic&&scene===0)message(c,'Diwali Magic','A festival of light and little wonders',179,smooth(t/.9),58);
   if(!cinematic&&scene===1&&lit.length===0)message(c,'Light the diyas','One small flame can light up a courtyard',178,smooth(t/.6),52);

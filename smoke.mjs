@@ -30,7 +30,8 @@ await withBrowser(chrome,url,async({send,evaluate})=>{
     document.querySelector('#to').dispatchEvent(new Event('input'))`);
   await click('generate');
   const share=await evaluate('document.querySelector("#link").value');
-  assert.equal(parseGreeting(new URL(share).hash).to,'Asha & Noor');
+  const link=new URL(share);
+  assert.equal(parseGreeting(link.hash,link.pathname,link.search).to,'Asha & Noor');
 
   await evaluate('document.activeElement.blur()');
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39});

@@ -15,12 +15,16 @@
     <div><p class="eyebrow">THE FESTIVAL OF LIGHTS</p><h1>A little light,<br><em>sent with love.</em></h1></div>
     <form id="names">
       <div class="fields"><label>From<input id="from" maxlength="40" value="Lahari 🌹" required dir="auto"></label><label>To<input id="to" maxlength="40" value="Pallavi" required dir="auto"></label></div>
+      <label class="wish-field" for="wish">Personalized Diwali Poem / Wish (Optional)
+        <textarea id="wish" rows="3" aria-describedby="wish-help" placeholder="Your first line here…&#10;Your second line here…"></textarea>
+      </label>
+      <p id="wish-help">Up to 240 characters and 5 lines. Anyone with the link can read the wish.</p>
       <button class="gold" type="submit">Open the greeting <span aria-hidden="true">↗</span></button>
     </form>
   </section>
   <section class="experience" aria-label="Interactive greeting">
     <div class="stage">
-      <canvas id="art" width="720" height="1280" aria-label="Animated Diwali courtyard"></canvas><span id="chapter"></span><p id="scene-cue" role="status" hidden></p>
+      <canvas id="art" width="720" height="1280" aria-label="Animated Diwali courtyard"></canvas><span id="chapter"></span><p id="recipient-wish" class="sr-only" hidden></p><p id="scene-cue" role="status" hidden></p>
       <section class="recipient-welcome" id="invitation" aria-label="Your Diwali greeting">
         <p class="eyebrow">THE FESTIVAL OF LIGHTS</p><h1 id="recipient-title"></h1>
         <p>A little light, sent with love.</p>

@@ -1,11 +1,11 @@
 import {WIDTH, HEIGHT, FPS, DURATION, SCENES, draw, timeline, lamps, rand, clamp, showCues, SHOW_LENGTH, FLIGHT, FIREWORK_LIFE, cameraAt, journey, journeyCamera, hitDiya} from './art.js';
-import {createJourney, greetingFragment, parseGreeting} from './journey.js';
+import {createJourney, greetingPath, greetingFragment, parseGreeting, wishError} from './journey.js';
 
 const $=id=>document.getElementById(id);
 const canvas=$('art'), ctx=canvas.getContext('2d',{alpha:false});
-const from=$('from'), to=$('to');
+const from=$('from'), to=$('to'), wish=$('wish');
 const nameLimit=40;
-const linkNames=parseGreeting(location.hash);
+const linkNames=parseGreeting(location.hash,location.pathname,location.search);
 const readName=(value,fallback)=>Array.from(value?.trim()||'').slice(0,nameLimit).join('')||fallback;
 const defaults={from:'Lahari 🌹',to:'Pallavi'};
 const cleanNames=(sender,recipient)=>({from:readName(sender,defaults.from),to:readName(recipient,defaults.to)});
@@ -16,6 +16,11 @@ if(viewer){
   document.body.classList.add('viewer');
   $('recipient-title').textContent='Happy Diwali, '+names.to+'!';
   $('recipient-from').textContent='With love, '+names.from;
+  if(linkNames.wish){
+    $('recipient-wish').hidden=false;
+    $('recipient-wish').textContent=linkNames.wish;
+    canvas.setAttribute('aria-describedby','recipient-wish');
+  }
   document.title='Happy Diwali, '+names.to+'!';
   $('cinema-controls').insertBefore($('sound'),$('cinema-exit'));
 }
@@ -432,16 +437,26 @@ $('names').onsubmit=e=>{
 };
 const updateNames=()=>{
   names=cleanNames(from.value,to.value);
-  if(!$('link').hidden)$('link').value=greetingUrl().href;
+  wish.setCustomValidity(wishError(wish.value));
+  if(!$('link').hidden){
+    if(wish.validity.valid)$('link').value=greetingUrl().href;
+    else {$('link').hidden=true;$('link').value='';}
+  }
 };
-from.addEventListener('input',updateNames);to.addEventListener('input',updateNames);
+[from,to,wish].forEach(field=>field.addEventListener('input',updateNames));
 function greetingUrl(){
-  const url=new URL(location.href);
-  url.search='';
-  url.hash=greetingFragment(names);
+  const url=new URL('./',location.href);
+  const message=wish.value.trim()?wish.value:'';
+  // Reserved path separators use the existing hash route across static hosts.
+  if(!url.hostname.endsWith('.chatgpt.site')||/[\/\\]/.test(names.from+names.to))url.hash=greetingFragment({...names,wish:message});
+  else{
+    url.pathname+=greetingPath(names);
+    if(message)url.searchParams.set('wish',message);
+  }
   return url;
 }
 function showLink(){
+  if(!wish.reportValidity())return null;
   const url=greetingUrl(), link=$('link');
   link.hidden=false;link.value=url.href;
   return url;
@@ -449,12 +464,13 @@ function showLink(){
 const localNote=()=>['localhost','127.0.0.1'].includes(location.hostname)?
   ' This preview link opens on this computer. Use the public site to share with friends.':'';
 $('generate').onclick=()=>{
-  showLink();
+  if(!showLink())return;
   $('status').textContent='Your greeting link is ready.'+localNote();
 };
-$('preview').onclick=()=>window.open(showLink().href,'_blank','noopener');
+$('preview').onclick=()=>{const url=showLink();if(url)window.open(url.href,'_blank','noopener');};
 async function copyLink(){
   const url=showLink();
+  if(!url)return;
   try{
     await navigator.clipboard.writeText(url.href);
     $('status').textContent='Greeting link copied.'+localNote();
@@ -466,6 +482,7 @@ async function copyLink(){
 $('copy').onclick=copyLink;
 $('share').onclick=async()=>{
   const url=showLink();
+  if(!url)return;
   if(!navigator.share||localNote())return copyLink();
   try{await navigator.share({title:'Happy Diwali, '+names.to+'!',url:url.href});}
   catch(e){if(e.name!=='AbortError')await copyLink();}
@@ -487,7 +504,7 @@ function animate(now){
   const width=low?450:720;
   if(canvas.width!==width){canvas.width=width;canvas.height=width*16/9;}
   draw(ctx,{scene,t,names,lit,litAt,revealed,lanterns:viewer?journey.lanterns:lanterns,
-    bursts,sparks,sparkTime:elapsed,waiting:viewer&&playing&&storyFrame.waiting,low,reduceMotion:reduced.matches,cinematic:viewer});
+    bursts,sparks,openingWish:linkNames?.wish,sparkTime:elapsed,waiting:viewer&&playing&&storyFrame.waiting,low,reduceMotion:reduced.matches,cinematic:viewer});
 }
 let exporting=false;
 const filename=({from,to})=>{
