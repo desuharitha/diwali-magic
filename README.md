@@ -59,10 +59,10 @@ The web greeting bundles short, mono, level-adjusted WAV excerpts:
 - Launch and boom: Rudmer_Rotteveel, [Whistle and Explosion Single_Firework](https://freesound.org/people/Rudmer_Rotteveel/sounds/336008/), CC0.
 - Crackle: soundmary, [fireworks exploding 1](https://freesound.org/people/soundmary/sounds/117616/), CC0. The excerpt is sourced from the [ESC-50 clip](https://github.com/karolpiczak/ESC-50/blob/master/audio/2-117616-A-48.wav).
 
-The creator's local MP4 exporter keeps its existing synthesized soundtrack. The live recipient greeting uses the recorded fireworks and hand-traced closing lettering.
+The live greeting and portrait MP4 exports use the recorded fireworks and hand-traced closing lettering. Export uses a fixed timeline, with both the full film and the finale clip including the golden-dust close.
 
 ## Add an opening wish
 
 Enter a wish in the optional creator field, then generate, preview, copy, or share the greeting. Use up to 240 characters and five lines. Long lines wrap to fit the portrait view. The wish is included as plain text in the URL, so anyone who has the link can read it.
 
-The public site generates direct personalized paths. Local previews and names containing path separators use the readable hash route. Older readable and legacy hash links still open. The wish appears during the live opening without changing any scene durations. Local MP4 and CSV exports still use sender and recipient names.
+The public site generates direct personalized paths. Local previews and names containing path separators use the readable hash route. Older readable and legacy hash links still open. The wish appears during the live opening without changing any scene durations. MP4s downloaded from the creator include the wish entered in the form. CSV batch exports use sender and recipient names.

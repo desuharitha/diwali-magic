@@ -1,4 +1,4 @@
-import {WIDTH, HEIGHT, FPS, DURATION, draw, timeline} from './art.js';
+import {WIDTH, HEIGHT, FPS, DURATION, FINALE_LENGTH, draw, timeline} from './art.js';
 
 export async function recordHostedMp4(names,width,duration,progress){
   const types=['video/mp4;codecs=avc1,mp4a.40.2','video/mp4'];
@@ -13,12 +13,12 @@ export async function recordHostedMp4(names,width,duration,progress){
   try{
     await audio.resume();
     progress('Preparing the film… Keep this tab open.');
-    const response=await fetch(new URL('./export-track.m4a',import.meta.url));
+    const response=await fetch(new URL('./cinematic-export-track.m4a',import.meta.url));
     if(!response.ok)throw new Error('Could not load the film soundtrack. Please try again.');
     const track=await audio.decodeAudioData(await response.arrayBuffer());
-    const clip=duration==='finale', length=clip?13:Number(duration);
+    const clip=duration==='finale', length=clip?FINALE_LENGTH:Number(duration);
     const speed=clip?1:DURATION/length;
-    const offset=clip?34:0;
+    const offset=clip?DURATION-FINALE_LENGTH:0;
     const canvas=document.createElement('canvas');
     canvas.width=width;canvas.height=width*HEIGHT/WIDTH;
     const context=canvas.getContext('2d',{alpha:false});

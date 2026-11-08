@@ -1,5 +1,5 @@
 import {recordHostedMp4} from './hosted-export.js';
-import {WIDTH, HEIGHT, FPS, DURATION, SCENES, draw, timeline, lamps, rand, clamp, showCues, SHOW_LENGTH, FLIGHT, FIREWORK_LIFE, cameraAt, journey, journeyCamera, hitDiya} from './art.js';
+import {WIDTH, HEIGHT, FPS, DURATION, FINALE_LENGTH, GRAND_START, closingVolley as finalBursts, SCENES, draw, timeline, lamps, rand, clamp, showCues, SHOW_LENGTH, FLIGHT, FIREWORK_LIFE, cameraAt, journey, journeyCamera, hitDiya} from './art.js';
 import {createJourney, greetingPath, greetingFragment, parseGreeting, wishError} from './journey.js';
 
 const $=id=>document.getElementById(id);
@@ -361,14 +361,9 @@ function advanceJourney(now,tap=false){
     if(!release.background&&previousTime<release.time&&t>=release.time)softAir(.025,.67,560);
   }
   if(scene===4)advanceShow(t);
-  const grand=journey.closing+journey.writingDuration;
-  if(t>=grand&&!closingVolley){
+  if(t>=GRAND_START&&!closingVolley){
     closingVolley=true;
-    [[130,170,1,1.1],[365,210,0,1.52],[583,149,3,1.16],[510,292,4,1.25],[224,307,5,1.2]]
-      .forEach(([x,y,palette,scale],i)=>{
-        const launch=grand+i*.17;
-        bursts.push({x,y,palette,scale,time:launch,depth:'near',seed:210+i,style:i});
-      });
+    bursts.push(...finalBursts.map(burst=>({...burst})));
   }
   if(t>=journey.closing+journey.writingDuration+2&&previousTime<journey.closing+journey.writingDuration+2)releaseScreen();
   previousTime=t;
@@ -531,10 +526,10 @@ export async function renderVideo(sender,recipient,width,progress=()=>{},duratio
     const surface=document.createElement('canvas');
     surface.width=width;surface.height=width*16/9;
     const context=surface.getContext('2d',{alpha:false});
-    const clip=duration==='finale', length=clip?13:Number(duration);
+    const clip=duration==='finale', length=clip?FINALE_LENGTH:Number(duration);
     const frameCount=FPS*length, frames=[];
     for(let i=0;i<frameCount;i++){
-      const position=clip?34+i/FPS:i*DURATION/frameCount;
+      const position=clip?DURATION-FINALE_LENGTH+i/FPS:i*DURATION/frameCount;
       draw(context,timeline(position,personal,clip));
       const jpg=await new Promise((resolve,reject)=>surface.toBlob(
         blob=>blob?resolve(blob):reject(new Error('Could not render a video frame.')),'image/jpeg',width===2160?.83:.89));

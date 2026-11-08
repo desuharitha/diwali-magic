@@ -2,7 +2,7 @@ import {acts} from './journey.js';
 import {drawOpeningWish} from './opening-wish.js';
 import {goldenWriting, WRITING_DURATION} from './lettering.js';
 
-export const WIDTH = 720, HEIGHT = 1280, FPS = 30, DURATION = 47;
+export const WIDTH = 720, HEIGHT = 1280, FPS = 30;
 export const SCENES = [
   ['The lantern-lit house', 'Move your pointer or trace the courtyard with a finger.', 'Enter the courtyard'],
   ['Light the diyas', 'Tap a lamp or press Space to kindle the next flame.', 'Light a diya'],
@@ -10,7 +10,6 @@ export const SCENES = [
   ['A light for the sky', 'Tap or press Space to release a sky lantern.', 'Release a lantern'],
   ['Fireworks for Diwali', 'Tap the sky or press Space to start the show.', 'Start fireworks'],
 ];
-export const cuts = [0, 8, 17, 26, 34, DURATION];
 export const lampTimes = [9, 10.4, 11.8, 13.2, 14.6];
 const cueFile = await fetch(new URL('./fireworks.json', import.meta.url));
 if (!cueFile.ok) throw new Error('Could not load the fireworks cues.');
@@ -19,9 +18,17 @@ export const FLIGHT = show.flight, FIREWORK_LIFE = show.lifetime;
 export const showCues = show.cues.map(([time,x,y,depth,palette,scale],i)=>
   ({time,x,y,depth,palette,scale,seed:i+15}));
 export const SHOW_LENGTH = showCues.at(-1).time + FIREWORK_LIFE;
-const exportBursts = [
-  {time:show.exportStart-cuts[4],x:486,y:313,depth:'near',palette:0,scale:1.22,seed:5,major:true},
-  ...showCues.map(cue=>({...cue,time:cue.time+show.exportStart-cuts[4]})),
+export const DURATION=show.filmDuration, FINALE_LENGTH=show.finaleLength;
+export const GRAND_START=show.grandStart;
+function fixedBurst([time,x,y,depth,palette,scale],seed,style){
+  return {time,x,y,depth,palette,scale,seed,style};
+}
+export const closingVolley=show.closingVolley.map((cue,i)=>
+  fixedBurst([GRAND_START+cue[0],...cue.slice(1)],210+i,i));
+const exportBursts=[
+  ...showCues.map(cue=>({...cue,time:show.exportStart+cue.time})),
+  ...show.filmAmbient.map((cue,i)=>fixedBurst(cue,175+i)),
+  ...closingVolley,
 ];
 export const colors = ['#ffce83','#ff879f','#92efe0','#cbaaff','#ff9f69'];
 export const lamps = [[124,931],[231,901],[360,887],[489,901],[596,931]];
@@ -348,7 +355,7 @@ export const journey = {
   acts,
   lamps:lampTimes,
   lanterns:[...leadLanterns,...distantLanterns],
-  closing:51,
+  closing:GRAND_START-WRITING_DURATION,
   writingDuration:WRITING_DURATION,
 };
 const cameraKeys=[[0,1,640],[8,1.045,666],[15,1.073,682],[23,1.055,672],
@@ -430,7 +437,7 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
   if(!cinematic&&scene===2&&revealed)message(c,'Happy Diwali, '+names.to+'!','May every little spark bring a new reason to smile.',170,1,59);
   if(!cinematic&&scene===3)message(c,'Send a wish into the sky','Let it rise with the lanterns',174,smooth(t/.6),50);
   for(const b of bursts)if(b.depth!=='far')firework(c,b,t,low||reduceMotion);
-  if(scene===4&&finaleWish)drawOpeningWish(c,finaleWish,t,reduceMotion);
+  if(scene===4&&finaleWish)drawOpeningWish(c,finaleWish,t-(DURATION-FINALE_LENGTH),reduceMotion);
   if(!cinematic&&scene===4&&t>2.4)message(c,'Happy Diwali, '+names.to+'!','With love, '+names.from,1152,smooth((t-2.4)/.9),52);
   if(cinematic){
     const wish=smooth((t-19)/2.2)*(1-smooth((t-25)/2.4));
@@ -452,17 +459,15 @@ export function draw(c,{scene,t,names,lit=[],litAt=[],revealed=false,lanterns=[]
   }
   if(fade)rect(c,0,0,WIDTH,HEIGHT,'rgba(18,11,28,'+fade+')');
 }
-export function timeline(seconds,names,finaleOnly=false) {
-  const scene=cuts.findIndex((_,i)=>seconds<cuts[i+1]);
-  const index=scene<0?4:scene, t=seconds-cuts[index];
+export function timeline(t,names,finaleOnly=false){
+  const scene=acts.findLastIndex(start=>start<=t);
   const sparks=[];
-  if(index===0)for(let i=0;i<80;i++){
+  if(scene===0)for(let i=0;i<80;i++){
     const time=1+i*.075;
     if(t-time>=0&&t-time<.64)sparks.push({time,x:114+i*6,y:873+Math.sin(i*.08)*61,vx:rand(i)*24-12,vy:-24,size:2+rand(i+8)*2});
   }
-  return {scene:index,t,names,openingWish:names.wish,finaleWish:finaleOnly?names.wish:undefined,lit:lampTimes.flatMap((time,i)=>seconds>=time?[i]:[]),
-    litAt:lampTimes.map(time=>time-cuts[1]),revealed:index===2&&t>1.4,lanterns:index===3?[{time:1.3,x:360},{time:3.4,x:528}]:[],
-    bursts:index===4?exportBursts.filter(b=>t>=b.time&&t-b.time<FIREWORK_LIFE):[],sparks,fade:Math.max(0,1-t/.32,1-(cuts[index+1]-seconds)/.32)*.92};
+  return {scene,t,names,cinematic:true,openingWish:names.wish,finaleWish:finaleOnly?names.wish:undefined,
+    litAt:journey.lamps,lanterns:journey.lanterns,sparks,
+    bursts:exportBursts.filter(b=>t>=b.time&&t-b.time<FIREWORK_LIFE),
+    fade:Math.max(0,1-(finaleOnly?t-(DURATION-FINALE_LENGTH):t)/.32,1-(DURATION-t)/.32)*.92};
 }
-
-

@@ -16,7 +16,9 @@ from urllib.parse import parse_qs, urlsplit
 import wave
 
 ROOT = Path(__file__).resolve().parent
-FPS, DURATION, RATE = 30, 47, 24000
+FPS, RATE = 30, 24000
+SHOW = json.loads((ROOT / "web" / "fireworks.json").read_text(encoding="utf-8"))
+DURATION, FINALE_LENGTH = SHOW["filmDuration"], SHOW["finaleLength"]
 MAX_BYTES = 768 * 1024 * 1024
 ENCODE_SLOT = threading.BoundedSemaphore(1)
 
@@ -41,7 +43,7 @@ def encoder():
 
 @lru_cache(maxsize=1)
 def soundtrack():
-    """Mix an original plucked melody, lamp chimes and low firework pops."""
+    """Mix the music and recorded effects on the film cue timeline."""
     notes = [261.63, 329.63, 392, 440, 392, 329.63, 293.66, 261.63,
              220, 261.63, 329.63, 392, 349.23, 329.63, 293.66, 220]
     samples = array("f", [0]) * (RATE * DURATION)
@@ -57,7 +59,7 @@ def soundtrack():
         tone(at, .38, hz, level, 10)
         tone(at + .018, .48, hz * 1.72, level * .34, 9)
 
-    for i in range(84):
+    for i in range(math.ceil(DURATION / .56)):
         at = i * .56
         hz = notes[i % len(notes)]
         tone(at, 1.25, hz, .085, 3.8)
@@ -66,18 +68,38 @@ def soundtrack():
             tone(at, 2.4, hz / 2, .065, 1.6)
     for i in range(23):
         chime(1 + i * .27, 1020 + (i % 5) * 87, .023)
-    for i, at in enumerate([9, 10.4, 11.8, 13.2, 14.6, 18.4, 27.3, 29.4]):
+    for i, at in enumerate([9, 10.4, 11.8, 13.2, 14.6, 18.4, 26.5, 28.9, 30.6, 32.9, 35.3, 38.5]):
         chime(at, 870 + i * 61, .08)
-    show = json.loads((ROOT / "web" / "fireworks.json").read_text(encoding="utf-8"))
-    bursts = [(0, 0, 1.0)]
-    bursts.extend((delay, palette, .34 if depth == "far" else .56)
-                  for delay, _, _, depth, palette, _ in show["cues"])
-    for delay, palette, level in bursts:
-        at = show["exportStart"] + delay
-        pop = at + show["flight"]
-        tone(at, .24, 620 + palette * 45, .045 * level, 5)
-        tone(pop, .36, 63 + palette * 7, .16 * level, 9)
-        chime(pop, 940 + palette * 61, .085 * level)
+    clips = {}
+    for name in ("launch", "boom", "crackle"):
+        with wave.open(str(ROOT / "web" / f"firework-{name}.wav"), "rb") as clip:
+            assert (clip.getnchannels(), clip.getsampwidth(), clip.getframerate()) == (1, 2, RATE)
+            clips[name] = array("h", clip.readframes(clip.getnframes()))
+        if sys.byteorder != "little":
+            clips[name].byteswap()
+
+    def mix(name, at, level, pitch):
+        clip = clips[name]
+        start = round(at * RATE)
+        for i in range(min(math.ceil((len(clip) - 1) / pitch), len(samples) - start)):
+            pos = i * pitch
+            base = int(pos)
+            value = clip[base] + (clip[base + 1] - clip[base]) * (pos - base)
+            samples[start + i] += value * level / 32768
+
+    bursts = [(SHOW["exportStart"] + cue[0], *cue[1:]) for cue in SHOW["cues"]]
+    bursts += [tuple(cue) for cue in SHOW["filmAmbient"]]
+    bursts += [(SHOW["grandStart"] + cue[0], *cue[1:]) for cue in SHOW["closingVolley"]]
+    for i, (at, _, _, depth, _, scale) in enumerate(bursts):
+        level = .33 if depth == "far" else min(.86, .46 * scale)
+        pitch = 1.08 if depth == "far" else .8 + (i % 4) * .07
+        boom = at + SHOW["flight"]
+        mix("launch", at, .19 * level, 1.34 + (i % 4) * .09)
+        mix("boom", boom, .42 * level, pitch)
+        if scale >= 1:
+            mix("crackle", boom + .15, .18 * level, pitch + .18)
+        if depth == "near":
+            mix("boom", boom + .26, .075 * level, pitch * .83)
     pcm = array("h", (round(32767 * max(-1, min(1, v)) * min(1, i / (RATE * .4),
                 (len(samples) - i) / RATE)) for i, v in enumerate(samples)))
     if sys.byteorder != "little":
@@ -91,8 +113,8 @@ def encode(jpegs, target, width, duration, ffmpeg):
     with wave.open(str(audio), "wb") as track:
         track.setparams((1, 2, RATE, 0, "NONE", "not compressed"))
         track.writeframes(soundtrack())
-    length = 13 if duration == "finale" else int(duration)
-    audio_filter = "atrim=start=34,asetpts=PTS-STARTPTS" if duration == "finale" else f"atempo={DURATION / length}"
+    length = FINALE_LENGTH if duration == "finale" else int(duration)
+    audio_filter = f"atrim=start={DURATION - FINALE_LENGTH},asetpts=PTS-STARTPTS" if duration == "finale" else f"atempo={DURATION / length}"
     tuning = ["-preset", "fast", "-crf", "19"] if codec == "libx264" else ["-b:v", "14000k" if width == 2160 else "5200k"]
     subprocess.run([executable, "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                     "-f", "mjpeg", "-framerate", str(FPS), "-i", str(jpegs), "-i", str(audio),
