@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Make a personalized, interactive Diwali greeting.">
+<title>Diwali Magic</title>
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<main>
+  <header><span class="brand"><span aria-hidden="true">✦</span> Diwali Magic</span><button id="sound" type="button" aria-pressed="true">Sound on</button></header>
+  <section class="intro">
+    <div><p class="eyebrow">THE FESTIVAL OF LIGHTS</p><h1>A little light,<br><em>sent with love.</em></h1></div>
+    <form id="names">
+      <div class="fields"><label>From<input id="from" maxlength="40" value="Lahari 🌹" required dir="auto"></label><label>To<input id="to" maxlength="40" value="Pallavi" required dir="auto"></label></div>
+      <button class="gold" type="submit">Open the greeting <span aria-hidden="true">↗</span></button>
+    </form>
+  </section>
+  <section class="recipient-welcome" aria-label="Your Diwali greeting">
+    <p class="eyebrow">THE FESTIVAL OF LIGHTS</p><h1 id="recipient-title"></h1>
+    <p>May your life glow with happiness, laughter, love, and beautiful moments.</p>
+    <p id="recipient-from"></p>
+  </section>
+  <section class="experience" aria-label="Interactive greeting">
+    <div class="stage"><canvas id="art" width="720" height="1280" aria-label="Animated Diwali courtyard"></canvas><span id="chapter"></span></div>
+    <div class="controls">
+      <div><strong id="scene"></strong><p id="hint"></p></div>
+      <div class="buttons"><button id="previous" type="button" aria-label="Previous scene">←</button><button id="action" class="gold" type="button"></button><button id="next" type="button" aria-label="Next scene">→</button></div>
+    </div>
+    <div id="finale-controls" hidden>
+      <div class="buttons"><button id="replay-show" type="button">Replay show</button><button id="stop-show" type="button">Stop fireworks</button></div>
+      <p id="finale-status" role="status"></p>
+    </div>
+    <nav id="steps" aria-label="Scenes"></nav>
+    <button id="restart" type="button">Replay greeting</button>
+  </section>
+  <section class="exports" aria-label="Share or download">
+    <div><h2>Send a little light</h2><p>Share the interactive greeting or save a portrait film from the local creator.</p></div>
+    <div class="buttons"><button id="generate" type="button">Generate Greeting Link</button><button id="copy" type="button">Copy Link</button><button id="share" type="button">Share Greeting</button><button id="preview" type="button">Preview Greeting</button><label class="quality">MP4 quality<select id="quality"><option value="1080">1080 × 1920</option><option value="720">720 × 1280</option><option value="2160">2160 × 3840</option></select></label><label class="quality">Film length<select id="duration"><option value="47">47 seconds</option><option value="35">35 seconds</option><option value="60">60 seconds</option><option value="finale">13-second finale</option></select></label><button id="download" class="gold" type="button">Download MP4</button></div>
+    <input id="link" hidden readonly aria-label="Personalized greeting link">
+    <p id="status" role="status"></p>
+  </section>
+</main>
+</body>
+</html>
